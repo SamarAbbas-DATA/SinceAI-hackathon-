@@ -1,0 +1,47 @@
+INSTRUCTIONS FOR CLAUDE: WHAT TO READ FOR WHICH TASK
+====================================================
+Read this file at the start of every session, and again whenever the conversation has been
+summarised or compacted (memory reset). Then read the files listed for the kind of task you have.
+
+ALWAYS (every session, every reset)
+  1. CLAUDE.md          project idea, stack, architecture, conventions
+  2. PROGRESS.md        what is done, what is next, known gaps
+  3. THINGS_TO_ASK.txt  open questions and assumed values (do not present them as facts)
+
+TASK: change or add a rule, threshold or flag text
+  - rules.json                 single source of truth for thresholds and sources
+  - src/engine/rules.ts        one function per rule id; every finding needs message, detail, fix
+  - THINGS_TO_ASK.txt          add a question if a value is not from a downloaded document
+  - tests/rules.test.ts, tests/features.test.ts
+
+TASK: physics (hydrostatics, weights, stability, flooding, resistance, motions)
+  - src/engine/vessel.ts       adapter to vessel.js (use boundedWaterline, never minX = 0 directly)
+  - src/engine/stability.ts, src/engine/flooding.ts
+  - src/vendor/vessel/PATCHES.md   what was changed in vessel.js and its known bug
+  - tests/physics.test.ts      add an analytic check for any new physics
+
+TASK: escape routes or evacuation
+  - src/engine/topology.ts, src/engine/evacuation.ts
+  - docs/REG13_Means_of_Escape.pdf, docs/MSC.1-Circ.1533_Evacuation_Analysis.pdf
+  - tests/evacuation.test.ts
+
+TASK: 3D view, editing, test mode animations
+  - src/ui/three/Viewport.tsx  scene, interaction (window-level pointer moves), test animations
+  - src/ui/store.ts            state, undo/redo, overlap-safe editSpace, live values for dials
+  - scripts/e2e.mjs            browser test; run it after any interaction change
+
+TASK: panels, layout, menus, theme, report
+  - src/ui/App.tsx (menus, build bar, tool rail), src/ui/panels.tsx, src/ui/Inspector.tsx
+  - src/ui/TestPanel.tsx (dials), src/ui/help.tsx (guide, sources, tour), src/ui/report.ts (PDF)
+  - src/index.css (theme tokens: bg, surface, surface-2, line, fg, muted, accent)
+
+TASK: file import / export
+  - src/engine/io.ts (design JSON, vessel.js JSON, offsets CSV), src/ui/App.tsx loadMesh (STL/OBJ/glTF)
+  - tests/io.test.ts, tests/features.test.ts
+
+BEFORE SAYING A CHANGE IS DONE
+  npm test            unit and physics tests
+  npm run typecheck
+  npm run dev  then  npm run e2e   (browser test, needs Chrome or Edge)
+  npm run report      prints the demo ship analysis in the terminal
+  Update PROGRESS.md (status and to-do) at the end of a work session.

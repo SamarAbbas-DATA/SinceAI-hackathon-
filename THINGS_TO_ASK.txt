@@ -1,0 +1,58 @@
+THINGS TO ASK MEYER TURKU
+=========================
+These are the open points behind the rules. The app no longer shows "assumed values" badges;
+this file is where they live instead. The same questions are kept as data in rules.json
+(questions_for_meyer), so update both when an answer comes in.
+
+Q1  Fire integrity of walls (rule FIRE-WALL-RATING)
+    Which fire integrity table do you use for room pairs (SOLAS II-2/9 tables 9.1 to 9.4)?
+    Do you want us to follow it exactly? Please share it.
+    Now: placeholder minutes per room pair in rules.json (engine room 60, galley 30, stairwell/cabin 30 ...).
+
+Q2  Distance between two escape routes (rule ESCAPE-TWO-EXITS)
+    How far apart must two escape routes be? Is there a number or a design rule you use?
+    Now: 5 m between the first doors of the two routes. Regulation 13 only says "widely separated".
+
+Q3  Escape stair width (rule ESCAPE-STAIR-WIDTH) - mostly answered by the USCG PDF
+    The USCG guideline quotes FSS Code 13.2.1.1: escape stairs at least 900 mm. Regulation 13's 800 mm
+    only applies to a dispensation case. Now: below 900 mm is red.
+    To confirm: do you size stair width by the number of persons (FSS Code 13.2.1.2 widths per person)?
+    We do not model that yet.
+
+Q4  Evacuation analysis (rule EVACUATION-TIME)
+    Values now come from MSC.1/Circ.1533 Annex 2 (downloaded). To confirm:
+    - Is the simplified Annex 2 method acceptable at this stage, or do you run an advanced (agent) simulation?
+    - E+L (embarkation and launching) is set to the 30 min default of Annex 1 para 5.5. Do you have a real value?
+    - We assume 45 degree stairs and the narrowest corridor on a route as its clear width.
+
+Q5  Flooding check (rule FLOOD-SURVIVAL)
+    Which flooding survival limits do you want in a simplified check (heel angle, damage cases)?
+    Is it fine to label our result a rough estimate?
+    Now: single and adjacent-pair damage of full-breadth compartments, survive if GM > 0 and the
+    bulkhead deck stays dry after sinkage and trim. Case weight = compartment length share.
+    Permeabilities 0.95 accommodation, 0.85 machinery, 0.60 stores (SOLAS II-1/7-3 table, not in docs/).
+
+Q6  Intact stability (rule INTACT-STABILITY)
+    Should the check follow the IS Code 2008 general criteria only, or also the weather criterion and
+    your internal margins?
+    Now: the IS Code 2008 Part A 2.2 values as commonly quoted (the code itself is not in docs/, please confirm):
+    area 0-30 >= 0.055 m.rad, 0-40 >= 0.09, 30-40 >= 0.03, GZ >= 0.20 m at 30 deg or more,
+    max GZ at >= 25 deg, GM >= 0.15 m.
+
+Q7  Survival craft (rule LSA-CAPACITY)
+    Which arrangement do you design to: SOLAS III/21.1.1 (lifeboats for 50 % per side plus liferafts
+    for 25 %) or a short international voyage / marine evacuation system arrangement?
+    Now: 50 % per side + 25 % liferafts, craft must be on a deck with an assembly station.
+
+Q8  Fire zone size (rule FIRE-ZONE-SIZE)
+    We use 40 m for mean zone length and width (from the EU directive text). SOLAS allows up to 48 m
+    in some cases. Which value do you work with?
+
+Q9  Weights
+    Can you share a typical lightship weight and KG for a ship like the demo, or a weight group
+    breakdown, so the early estimate can be calibrated? The vessel.js Parsons estimate is rough.
+
+DOCUMENTS STILL MISSING
+- (done) US Coast Guard stair guideline is in docs/.
+- SOLAS II-1/7-3 permeability table, IS Code 2008 Part A, SOLAS III/21: needed to move Q5 to Q7
+  values from "assumed" to "from_source" in rules.json.

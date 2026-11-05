@@ -1,0 +1,199 @@
+// Browser interaction test: drives the real app in headless Chrome over the DevTools protocol.
+// Start the dev server first (npm run dev), then: npm run e2e
+// Env: CHROME=path/to/chrome  APP_URL=http://localhost:5173/
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const CHROME =
+  process.env.CHROME ??
+  ["C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "/usr/bin/google-chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].find((p) => fs.existsSync(p));
+const URL_ = process.env.APP_URL ?? "http://localhost:5173/";
+const PORT = 9333;
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-"));
+const outDir = path.resolve("e2e-output");
+fs.mkdirSync(outDir, { recursive: true });
+for (const f of fs.readdirSync(outDir)) fs.rmSync(path.join(outDir, f));
+
+const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, "--window-size=1600,900", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "about:blank"], { stdio: "ignore" });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let results = [];
+const check = (name, ok, info = "") => {
+  results.push(ok);
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${info ? `  (${info})` : ""}`);
+};
+
+async function main() {
+  let ver;
+  for (let i = 0; i < 50 && !ver; i++) {
+    try {
+      ver = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json();
+    } catch {
+      await sleep(200);
+    }
+  }
+  const tab = await (await fetch(`http://127.0.0.1:${PORT}/json/new?${URL_}`, { method: "PUT" })).json();
+  const ws = new WebSocket(tab.webSocketDebuggerUrl);
+  await new Promise((r) => (ws.onopen = r));
+  let id = 0;
+  const pending = new Map();
+  ws.onmessage = (m) => {
+    const d = JSON.parse(m.data);
+    if (d.id && pending.has(d.id)) {
+      pending.get(d.id)(d);
+      pending.delete(d.id);
+    }
+  };
+  const send = (method, params = {}) => new Promise((r) => (pending.set(++id, r), ws.send(JSON.stringify({ id, method, params }))));
+  const ev = async (expression) => {
+    const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+    if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description ?? "eval error");
+    return r.result?.result?.value;
+  };
+  const mouse = (type, x, y, buttons = 0) => send("Input.dispatchMouseEvent", { type, x, y, button: type === "mouseMoved" ? "none" : "left", buttons, clickCount: type === "mouseMoved" ? 0 : 1 });
+  const click = async (p) => {
+    await mouse("mouseMoved", p.x, p.y);
+    await sleep(80);
+    await mouse("mousePressed", p.x, p.y, 1);
+    await sleep(40);
+    await mouse("mouseReleased", p.x, p.y, 0);
+    await sleep(500);
+  };
+  const shot = async (name) => {
+    const r = await send("Page.captureScreenshot", { format: "png" });
+    fs.writeFileSync(path.join(outDir, `${name}.png`), Buffer.from(r.result.data, "base64"));
+  };
+  const S = "window.__store.getState()";
+
+  await send("Runtime.enable");
+  await send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: outDir });
+  for (let i = 0; i < 60; i++) {
+    if (await ev(`!!window.__store && !!${S}.analysis && !!window.__project`)) break;
+    await sleep(250);
+  }
+  check("app loads and analysis runs", await ev(`!!${S}.analysis && ${S}.analysis.errors.length === 0`));
+  await sleep(1800); // the guided tour opens itself on a first visit; close it so it does not cover the 3D view
+  check("guided tour opens on the first visit", (await ev(`${S}.tourStep`)) === 0);
+  await shot("tour");
+  await ev(`${S}.set({ tourStep: null, activeDeckId: 'D3' })`);
+  await sleep(2500);
+  await shot("design-dark");
+  await ev(`${S}.select({ kind: 'space', id: 'galley' }); ${S}.set({ activeDeckId: 'D4' })`);
+  await sleep(1200);
+  await shot("inspect-dark");
+  await ev(`${S}.select(null); ${S}.set({ panel: 'issues', activeDeckId: 'D3' }); ${S}.setTheme('light')`);
+  await sleep(1500);
+  await shot("design-light");
+  await ev(`${S}.setTheme('dark'); ${S}.setView({ isolateDeck: true }); window.dispatchEvent(new CustomEvent('viewport:view', { detail: 'plan' }))`);
+  await sleep(2500);
+
+  // place a cabin on free deck
+  const n0 = await ev(`${S}.design.spaces.length`);
+  await ev(`${S}.set({ tool: { kind: 'space', type: 'cabin' } })`);
+  await click(await ev(`window.__project(96, 0, 9.02)`));
+  const n1 = await ev(`${S}.design.spaces.length`);
+  check("click places a cabin on free deck area", n1 === n0 + 1, `${n0} -> ${n1}`);
+
+  // overlapping placement is refused
+  await click(await ev(`window.__project(50, 3, 9.02)`));
+  const n2 = await ev(`${S}.design.spaces.length`);
+  const toast = await ev(`${S}.toast?.text ?? ''`);
+  check("placing on top of a cabin is refused with a message", n2 === n1 && /overlap/.test(toast), toast.slice(0, 70));
+
+  // drag into an overlap snaps back
+  await ev(`${S}.set({ tool: { kind: 'select' } })`);
+  const a = await ev(`window.__project(22, 3, 10.5)`);
+  const b = await ev(`window.__project(25.5, 3, 9.02)`);
+  await mouse("mouseMoved", a.x, a.y);
+  await sleep(80);
+  await mouse("mousePressed", a.x, a.y, 1);
+  await sleep(60);
+  const pressedOn = await ev(`(${S}.selection?.id ?? 'none') + ' / ' + document.elementFromPoint(${a.x}, ${a.y})?.tagName`);
+  for (let i = 1; i <= 8; i++) {
+    await mouse("mouseMoved", a.x + ((b.x - a.x) * i) / 8, a.y + ((b.y - a.y) * i) / 8, 1);
+    await sleep(40);
+  }
+  const xDuring = await ev(`${S}.design.spaces.find(s => s.id === 'D3-cabP20').xCentre`);
+  await mouse("mouseReleased", b.x, b.y, 0);
+  await sleep(600);
+  check("a dragged cabin follows the cursor over other rooms", Math.abs(xDuring - 22) > 2, `x during drag = ${xDuring}`);
+  const xBack = await ev(`${S}.design.spaces.find(s => s.id === 'D3-cabP20').xCentre`);
+  const dragToast = await ev(`${S}.toast?.text ?? ''`);
+  check("dragging a cabin into its neighbour is undone", Math.abs(xBack - 22) < 0.01 && /Moved back/.test(dragToast), `x = ${xBack}; pressed on ${pressedOn}; ${dragToast.slice(0, 70)}`);
+
+  // valid drag moves the new cabin
+  const newId = await ev(`${S}.design.spaces.at(-1).id`);
+  const c0 = await ev(`window.__project(96, 0, 10.5)`);
+  const c1 = await ev(`window.__project(100, 0, 9.02)`);
+  await mouse("mouseMoved", c0.x, c0.y);
+  await sleep(80);
+  await mouse("mousePressed", c0.x, c0.y, 1);
+  for (let i = 1; i <= 8; i++) {
+    await mouse("mouseMoved", c0.x + ((c1.x - c0.x) * i) / 8, c0.y + ((c1.y - c0.y) * i) / 8, 1);
+    await sleep(40);
+  }
+  await mouse("mouseReleased", c1.x, c1.y, 0);
+  await sleep(600);
+  const xMoved = await ev(`${S}.design.spaces.find(s => s.id === '${newId}').xCentre`);
+  check("dragging a cabin to free space moves it", Math.abs(xMoved - 100) < 0.8, `x = ${xMoved}`);
+
+  // undo with the keyboard
+  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "z", code: "KeyZ", modifiers: 2, windowsVirtualKeyCode: 90 });
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "z", code: "KeyZ", modifiers: 2, windowsVirtualKeyCode: 90 });
+  await sleep(400);
+  const xUndo = await ev(`${S}.design.spaces.find(s => s.id === '${newId}')?.xCentre`);
+  check("Ctrl+Z undoes the move", Math.abs(xUndo - 96) < 0.01, `x = ${xUndo}`);
+  await sleep(500);
+  await shot("design-plan");
+
+  // test mode: waves
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: '3d' })); ${S}.set({ mode: 'test', panel: 'test' }); ${S}.setTest({ kind: 'sea', running: true, restart: Date.now() })`);
+  await sleep(4500);
+  const sea = await ev(`({ t: window.__live.t, n: window.__live.history.length, h: Math.max(...window.__live.history.map(x => Math.abs(x.a))) })`);
+  check("waves test animates the ship (time runs, heave moves)", sea.t > 2 && sea.n > 10 && sea.h > 0.1, JSON.stringify(sea));
+  await shot("test-waves");
+
+  await ev(`${S}.setTest({ kind: 'heel', heelSweep: true, restart: Date.now() })`);
+  await sleep(4500);
+  const heel = await ev(`({ deg: window.__live.heelDeg, gz: window.__live.gz })`);
+  check("heel test sweeps the heel angle and reads GZ", heel.deg > 2 && heel.gz > 0, JSON.stringify(heel));
+  await shot("test-heel");
+
+  const lost = await ev(`${S}.analysis.flood.cases.findIndex(c => !c.survives)`);
+  await ev(`${S}.setTest({ kind: 'flood', floodCase: ${Math.max(0, lost)}, restart: Date.now() })`);
+  await sleep(7500);
+  const fl = await ev(`({ p: window.__live.floodProgress, fwd: window.__live.draftFwd })`);
+  check("flooding test reaches the damaged waterline", fl.p > 0.99 && fl.fwd > 5.5, JSON.stringify(fl));
+  await shot("test-flood");
+
+  await ev(`${S}.setTest({ kind: 'evac', restart: Date.now() })`);
+  await sleep(6000);
+  const ev2 = await ev(`({ arrived: window.__live.evacArrived, total: window.__live.evacTotal })`);
+  check("evacuation walk-through moves people to the assembly stations", ev2.arrived > 0 && ev2.total > 100, JSON.stringify(ev2));
+  await shot("test-evac");
+
+  // PDF report
+  const before = fs.readdirSync(outDir).filter((f) => f.endsWith(".pdf")).length;
+  await ev(`window.__report()`);
+  await sleep(3000);
+  const pdfs = fs.readdirSync(outDir).filter((f) => f.endsWith(".pdf"));
+  const size = pdfs.length ? fs.statSync(path.join(outDir, pdfs[pdfs.length - 1])).size : 0;
+  check("PDF report downloads", pdfs.length > before && size > 20000, `${pdfs.at(-1)} ${Math.round(size / 1024)} kB`);
+
+  const errors = await ev(`${S}.analysis.errors`);
+  check("no calculation errors", errors.length === 0, errors.join("; "));
+  ws.close();
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    results.push(false);
+  })
+  .finally(() => {
+    chrome.kill();
+    const failed = results.filter((x) => !x).length;
+    console.log(`\n${results.length - failed} passed, ${failed} failed. Screenshots and PDF in ${outDir}`);
+    process.exit(failed ? 1 : 0);
+  });

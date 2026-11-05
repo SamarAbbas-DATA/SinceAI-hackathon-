@@ -1,0 +1,281 @@
+{
+  "meta": {
+    "project": "Ship Design Pre-Check",
+    "units": "metres, millimetres, minutes",
+    "disclaimer": "Early pre-check only. Not an official approval.",
+    "status_values": {
+      "from_source": "number taken from a document we downloaded",
+      "assumed": "our placeholder, must be confirmed with Meyer Turku"
+    },
+    "result_colours": {
+      "grey": "not enough built yet to check",
+      "amber": "within 10 percent of the limit",
+      "red": "breaks the rule",
+      "green": "passes"
+    }
+  },
+
+  "sources": [
+    {
+      "id": "EU-2009-45",
+      "name": "Directive 2009/45/EC (EU free copy, domestic voyages only)",
+      "url": "https://eur-lex.europa.eu/eli/dir/2009/45"
+    },
+    {
+      "id": "REG13",
+      "name": "SOLAS II-2 Regulation 13 Means of Escape (UK government copy)",
+      "url": "https://assets.publishing.service.gov.uk/media/5a80f3c6ed915d74e33fd543/Regulation_13_-_Means_of_Escape.pdf"
+    },
+    {
+      "id": "USCG-SOLAS-01",
+      "name": "US Coast Guard guideline on stairs in escape paths",
+      "url": "https://www.dco.uscg.mil/Portals/9/MSC/PRG/PRG.SOLAS-01.2024.01.22.Curved%20or%20Winding%20Stairs%20in%20Escape%20Paths.pdf"
+    },
+    {
+      "id": "MSC-1-CIRC-1533",
+      "name": "IMO evacuation analysis guidelines",
+      "url": "https://www.deutsche-flagge.de/de/redaktion/dokumente/interpretationen/solas/ii-2/msc-1-circ-1533-revised-guidelines-on-evacuation-analysis-for-new-and-existing-passenger-ships.pdf"
+    },
+    {
+      "id": "MSC-429-98",
+      "name": "Explanatory notes to SOLAS chapter II-1 (flooding)",
+      "url": "https://assets.publishing.service.gov.uk/media/65817268ed3c34000d3bfb39/MGN_692_Annex.pdf"
+    },
+    {
+      "id": "ICS-TI-20-07",
+      "name": "Summary of SOLAS II-1 amendment MSC.421(98), contains the R formula",
+      "url": "https://www.ics.org.ir/IFleet/CLDFiles/PUB/e7f16923-45fc-4c90-93e3-a7bddfedd557_ICS%20TI-20-07"
+    },
+    {
+      "id": "SOLAS-III-21",
+      "name": "SOLAS chapter III regulation 21, survival craft for passenger ships (not downloaded; values to be confirmed)",
+      "url": "https://www.imo.org/en/About/Conventions/Pages/International-Convention-for-the-Safety-of-Life-at-Sea-(SOLAS),-1974.aspx"
+    },
+    {
+      "id": "IS-CODE-2008",
+      "name": "IMO International Code on Intact Stability 2008, Part A 2.2 (not downloaded; values to be confirmed)",
+      "url": "https://www.imo.org/en/OurWork/Safety/Pages/Stability.aspx"
+    }
+  ],
+
+  "fire_rating_scale": {
+    "A-0": 0,
+    "A-15": 15,
+    "A-30": 30,
+    "A-60": 60,
+    "meaning": "minutes the wall keeps the far side from getting too hot",
+    "status": "from_source",
+    "source": "EU-2009-45, chapter II-2 definitions"
+  },
+
+  "rules": [
+    {
+      "id": "FIRE-ZONE-SIZE",
+      "title": "Fire zones must not be too big",
+      "status": "from_source",
+      "source": "EU-2009-45",
+      "clause": "Chapter II-2, definition of main vertical zones",
+      "plain_meaning": "The ship is cut into sections by fire-resistant walls. On any deck, a section's average length and width should generally not exceed 40 m.",
+      "inputs_needed": ["fire_walls", "decks"],
+      "early_warning": "Runs as soon as the first fire walls are placed. Shows each zone's length and width live.",
+      "test": "For every zone on every deck, measure mean length and mean width.",
+      "values": { "max_mean_length_m": 40, "max_mean_width_m": 40, "amber_above_m": 36 },
+      "fail_if": "mean length > 40 or mean width > 40",
+      "ask_meyer": null
+    },
+
+    {
+      "id": "FIRE-WALL-RATING",
+      "title": "Walls between risky rooms need stronger fire rating",
+      "status": "assumed",
+      "source": "EU-2009-45",
+      "clause": "Chapter II-2, tables of fire integrity of divisions (real table depends on room categories and sprinklers)",
+      "plain_meaning": "A wall between two room types must hold back fire for a minimum number of minutes.",
+      "inputs_needed": ["rooms", "walls", "wall_ratings"],
+      "early_warning": "Runs when a wall is placed between two rooms. Shows the minimum rating needed straight away.",
+      "test": "For every wall, look up the room pair and compare the wall's minutes with the minimum.",
+      "values": {
+        "minimum_minutes_by_room_pair": [
+          { "pair": ["engine_room", "cabin"], "min": 60 },
+          { "pair": ["engine_room", "corridor"], "min": 60 },
+          { "pair": ["galley", "cabin"], "min": 30 },
+          { "pair": ["galley", "corridor"], "min": 30 },
+          { "pair": ["stairwell", "cabin"], "min": 30 },
+          { "pair": ["stairwell", "corridor"], "min": 0 },
+          { "pair": ["cabin", "cabin"], "min": 0 },
+          { "pair": ["fire_zone_boundary", "any"], "min": 60 }
+        ]
+      },
+      "fail_if": "wall minutes < minimum for that room pair",
+      "assumption_note": "Numbers above are placeholders to make the demo work.",
+      "ask_meyer": "Q1"
+    },
+
+    {
+      "id": "ESCAPE-TWO-EXITS",
+      "title": "Two separate ways out",
+      "status": "from_source",
+      "source": "REG13",
+      "clause": "Regulation 13, 2.1, 2.2, 3.2.2",
+      "plain_meaning": "Every space needs at least two widely separated escape routes. Lifts do not count.",
+      "inputs_needed": ["rooms", "doors", "corridors", "stairs"],
+      "early_warning": "Runs as soon as a room has doors. Shows 'only one way out' right away.",
+      "test": "From each room, find routes to a stairwell. Count how many are separate (they share no door or corridor piece) and far apart.",
+      "values": {
+        "min_separate_routes": 2,
+        "lifts_count_as_exit": false,
+        "min_distance_between_exits_m": 5,
+        "group_of_spaces_types": ["cabin", "store", "other", "galley"],
+        "group_of_spaces_note": "Reg 13 2.1 allows 'spaces or groups of spaces'. A cabin with one door onto a corridor is checked as part of that corridor's group.",
+        "one_route_must_reach_enclosed_stairway": true,
+        "one_route_must_reach_enclosed_stairway_clause": "Regulation 13, 3.2.4.1",
+        "dead_end_corridor_max_m": 7,
+        "dead_end_corridor_clause": "Regulation 13, 3.3.4"
+      },
+      "fail_if": "separate routes < 2, or no route reaches an enclosed stairway (unless on the assembly deck), or a dead-end corridor longer than 7 m",
+      "assumption_note": "The 5 m distance between exits is an assumed placeholder. The document says 'widely separated' with no number. The 7 m dead-end limit is quoted from Reg 13 3.3.4.",
+      "ask_meyer": "Q2"
+    },
+
+    {
+      "id": "ESCAPE-STAIR-WIDTH",
+      "title": "Escape stairs wide enough",
+      "status": "from_source",
+      "source": "USCG-SOLAS-01 and REG13",
+      "clause": "SOLAS II-2/13.3.2.4.5 referring to the FSS Code chapter 13.2.1.1, 13.2.2.2 and 13.2.2.3 (quoted in USCG PRG SOLAS-01); Regulation 13 3.2.1.2 for the 800 mm dispensation case",
+      "plain_meaning": "Escape stairs must be at least 900 mm wide (FSS Code). Stairs serving more than 90 people must run fore and aft with no curves. A flight may rise at most 3.5 m before a landing, at no more than 45 degrees. 800 mm is only accepted where a single means of escape has been allowed by dispensation (Reg 13 3.2.1.2).",
+      "inputs_needed": ["stairs", "people_per_room"],
+      "early_warning": "Runs as soon as a stair is placed. Shows the width against 900 mm and the persons the stair serves.",
+      "test": "Check width, direction, height of each flight, and handrails on both sides.",
+      "values": {
+        "min_width_mm_reg13": 800,
+        "min_width_mm_uscg_fss": 900,
+        "use_for_red": 900,
+        "persons_needing_fore_aft_alignment": 90,
+        "max_rise_without_landing_m": 3.5,
+        "max_inclination_deg": 45,
+        "handrails_both_sides": true
+      },
+      "fail_if": "width < 900 -> red; more than 90 persons and not aligned fore and aft -> red; rise > 3.5 m -> red",
+      "ask_meyer": "Q3"
+    },
+
+    {
+      "id": "EVACUATION-TIME",
+      "title": "Everyone can get out in time",
+      "status": "from_source",
+      "source": "MSC-1-CIRC-1533",
+      "clause": "SOLAS II-2/13.3.2.7; MSC.1/Circ.1533 Annex 1 para 5 (performance standard) and Annex 2 with Appendix 1 (simplified method)",
+      "plain_meaning": "Evacuation analysis is mandatory for new passenger ships over 36 passengers with keel laid on or after 1 January 2020. Guidelines say to do it early in design. Total duration 1.25(R+T) + 2/3(E+L) must not exceed n.",
+      "inputs_needed": ["rooms", "people_per_room", "doors", "corridors", "stairs", "muster_stations"],
+      "early_warning": "Grey until rooms, stairs and a muster station exist. Then the simplified Annex 2 calculation runs on every change.",
+      "test": "Hydraulic model of Annex 2 Appendix 1: corridor density gives initial flow and speed (table 1.1), flows merge at stairs (formula 1.7) and are capped at the maximum specific flow (table 1.2), speeds after transitions from table 1.3. tI = tF + tdeck + tstair + tassembly, T = (gamma + delta) tI.",
+      "values": {
+        "applies_if_passengers_over": 36,
+        "applies_if_keel_laid_on_or_after": "2020-01-01",
+        "response_duration_min": { "night": 10, "day": 5 },
+        "embarkation_launching_default_min": 30,
+        "safety_factor": 1.25,
+        "correction_factor_gamma_cases_1_2": 2,
+        "counterflow_delta": 0.3,
+        "max_specific_flow_p_per_m_s": { "stairs_down": 1.1, "stairs_up": 0.88, "corridors": 1.3, "doorways": 1.3 },
+        "congestion_density_p_per_m2": 3.5,
+        "congestion_flow_difference_p_per_s": 1.5,
+        "n_minutes_ro_ro": 60,
+        "n_minutes_up_to_3_main_vertical_zones": 60,
+        "n_minutes_more_than_3_main_vertical_zones": 80,
+        "amber_above_percent_of_limit": 90
+      },
+      "fail_if": "1.25(R+T) + 2/3(E+L) > n",
+      "assumption_note": "Values are from the downloaded Circ.1533. Our simplifications: each space follows its shortest route; corridor clear width is taken as the narrowest corridor on the route; stair flights assumed at 45 degrees; E+L defaults to 30 min (Annex 1 5.5).",
+      "ask_meyer": "Q4"
+    },
+
+    {
+      "id": "FLOOD-SURVIVAL",
+      "title": "Ship survives flooding",
+      "status": "assumed",
+      "source": "MSC-429-98 and ICS-TI-20-07",
+      "clause": "SOLAS II-1 regulations 6 and 7",
+      "plain_meaning": "The ship's survival score A must be at least the required score R. A adds up, over damage cases, the chance of that damage times the chance of surviving it. R depends on number of people aboard.",
+      "inputs_needed": ["watertight_walls", "decks", "hull", "people_total"],
+      "early_warning": "Runs when two watertight walls exist. Shows compartments and their lengths. Full score appears once the hull and bulkhead deck are set.",
+      "test": "Flood each single compartment, then each pair of neighbouring compartments. Compute tilt. Mark each case survive or sink. Weight by compartment length. Add up to get A.",
+      "values": {
+        "required_score_R": {
+          "if_people_below_400": 0.722,
+          "if_400_to_1350": "N / 7580 + 0.66923",
+          "if_1350_to_6000": "0.0369 * ln(N + 89.048) + 0.579",
+          "if_above_6000": "1 - (852.5 + 0.03875 * N) / (N + 5000)",
+          "N_means": "total persons on board, passengers plus crew",
+          "status": "from_source"
+        },
+        "damage_cases": ["one_compartment", "two_neighbouring_compartments"],
+        "case_weight": "compartment length share of total ship length",
+        "single_vs_pair_mix": { "single": 0.5, "pair": 0.5 },
+        "survive_if_final_heel_degrees_below": 12,
+        "survive_if_bulkhead_deck_not_underwater": true,
+        "amber_if_A_within_percent_of_R": 5,
+        "permeability": { "accommodation": 0.95, "machinery": 0.85, "stores": 0.6, "void": 0.95 },
+        "permeability_note": "SOLAS II-1/7-3 table values (the table itself is not in the downloaded MGN 692 annex; confirm)."
+      },
+      "fail_if": "A < R",
+      "assumption_note": "Heel limit, damage cases, and weights are our simplification. Compartments span the full breadth, so flooding is symmetric. Real calculation uses specialist software. Always label the result 'simplified estimate'.",
+      "ask_meyer": "Q5"
+    },
+
+    {
+      "id": "INTACT-STABILITY",
+      "title": "Ship is stable when undamaged",
+      "status": "assumed",
+      "source": "IS-CODE-2008",
+      "clause": "IS Code 2008 Part A, 2.2.1 to 2.2.4 (general criteria)",
+      "plain_meaning": "The righting lever curve (GZ) must give enough area, a large enough maximum at a large enough angle, and a minimum initial GM.",
+      "inputs_needed": ["hull", "decks", "rooms", "weights"],
+      "early_warning": "Runs as soon as a hull exists. Every change in rooms or loading moves KG and the GZ curve.",
+      "test": "Compute GZ by integrating heeled hull sections at constant displacement (fixed trim, hull watertight to the moulded depth) and compare with the criteria.",
+      "values": {
+        "min_area_0_30_m_rad": 0.055,
+        "min_area_0_40_m_rad": 0.09,
+        "min_area_30_40_m_rad": 0.03,
+        "min_gz_at_30_deg_or_more_m": 0.2,
+        "min_angle_of_max_gz_deg": 25,
+        "min_initial_gm_m": 0.15,
+        "amber_within_percent": 10
+      },
+      "fail_if": "any criterion below its minimum",
+      "assumption_note": "Criteria values quoted from the IS Code 2008, which is not in docs/. Free-surface correction of slack tanks is included; weather criterion and downflooding angle are not modelled.",
+      "ask_meyer": "Q6"
+    },
+
+    {
+      "id": "LSA-CAPACITY",
+      "title": "Enough lifeboats and liferafts",
+      "status": "assumed",
+      "source": "SOLAS-III-21",
+      "clause": "SOLAS III/21.1.1 (passenger ships on international voyages)",
+      "plain_meaning": "Lifeboats on each side must together carry at least half of everyone on board, and liferafts must carry at least another quarter. They belong on the embarkation deck next to the assembly stations.",
+      "inputs_needed": ["lsa", "people_total", "muster_stations"],
+      "early_warning": "Grey until the first lifeboat or liferaft is placed. Then capacity per side is compared with the persons on board on every change.",
+      "test": "Sum lifeboat capacity on each side and liferaft capacity overall; compare with the total persons on board.",
+      "values": {
+        "lifeboats_each_side_min_share": 0.5,
+        "liferafts_min_share": 0.25,
+        "must_be_on_assembly_deck": true
+      },
+      "fail_if": "lifeboat capacity on either side < 50 % of persons, or liferaft capacity < 25 % of persons",
+      "assumption_note": "Shares quoted from SOLAS III/21.1.1, which is not in docs/. Short international voyage alternatives are not modelled.",
+      "ask_meyer": "Q7"
+    }
+  ],
+
+  "questions_for_meyer": {
+    "Q1": "Which fire integrity table do you use for room pairs, and do you want us to follow it exactly? Please share it.",
+    "Q2": "How far apart must two escape routes be? Is there a number or a design rule you use?",
+    "Q3": "Stair width: 800 mm (Regulation 13) or 900 mm (FSS Code)? Which do you design to?",
+    "Q4": "Which evacuation time limit and walking speeds do you use? Can we use a simplified total time for the demo?",
+    "Q5": "Which flooding survival limits do you want in a simplified check (heel angle, damage cases)? Is it fine to label our result a rough estimate?",
+    "Q6": "Should the intact stability check follow IS Code 2008 general criteria only, or also the weather criterion and your internal margins?",
+    "Q7": "Which survival craft arrangement do you design to (SOLAS III/21.1.1 lifeboats 50 % per side plus 25 % liferafts, or a short international voyage / marine evacuation system arrangement)?"
+  }
+}

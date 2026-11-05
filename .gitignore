@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# build output and caches
+dist/
+.vite/
+*.tsbuildinfo
+coverage/
+
+# test output (browser test screenshots and PDFs)
+e2e-output/
+
+# logs
+*.log
+npm-debug.log*
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# large reference videos (kept locally; screenshots and the wave GIF stay in the repo)
+reference_images/*.mp4
+
+# Claude Code local settings
+.claude/settings.local.json
