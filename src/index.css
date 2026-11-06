@@ -84,6 +84,20 @@ input {
 .dark input {
   color-scheme: dark;
 }
+/* Dropdown lists: the closed select is see-through, so give the open list explicit theme colours.
+   Without this, Windows browsers draw a white list with light text in the dark theme. */
+select option,
+select optgroup {
+  background-color: var(--surface);
+  color: var(--fg);
+}
+select option:checked {
+  background-color: var(--surface-2);
+  color: var(--accent);
+}
+select option:disabled {
+  color: var(--faint);
+}
 
 input[type="range"] {
   -webkit-appearance: none;

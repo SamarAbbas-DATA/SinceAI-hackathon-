@@ -21,6 +21,13 @@ Done in session 3:
 - UI redesign after the reference videos: neutral charcoal / off-white themes, dark-orange accent, crisp status colours without glow, thin monochrome icons that light up on hover, minimal right panel (rows, hairlines, underlined tabs), polygon wireframe sea with brighter crests, rooms assemble on load, map-style pins above flagged rooms, wipe/pop animations, drifting line fragments.
 - Browser test now also takes dark, light, inspector and tour screenshots; a pin-blocks-drag bug it found is fixed (pins are visual only).
 
+Done in session 4 (2026-11-06):
+- Stair checks (ESCAPE-STAIR-WIDTH): the flights must fit in the stairwell box (length needed = rise per flight / tan 45 degrees; width needed = clear width, or 2 x clear width with 2+ flights per deck), and a stair needs a door on its top and bottom deck. Demo results unchanged. 3 new tests (55 total).
+- Inspector stair section shows the climb, rise per flight, length and width needed versus actual, and people arriving versus passing per second.
+- Dropdown lists use theme colours in both themes (were white with light text on Windows in dark mode).
+- Build bar and tool rail: soft rounded tile in the tool colour on hover/active, icon fades slightly.
+- Rules without a downloaded PDF (fire zone, fire walls, stability, lifeboats) now link to the online source page.
+
 ## To-do
 ### Docs and data
 - [ ] Download the USCG stair PDF by hand (see THINGS_TO_ASK.txt)

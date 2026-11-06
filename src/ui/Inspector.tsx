@@ -11,6 +11,33 @@ import { focusOn } from "./three/Viewport";
 
 const RATING_MIN: Record<string, number> = RULES.fire_rating_scale;
 
+/** Read-only stair geometry: how high it climbs and how much room the flights need (same maths as the ESCAPE-STAIR-WIDTH rule). */
+function StairFit({ design, id }: { design: Design; id: string }) {
+  const s = design.spaces.find((x) => x.id === id);
+  if (!s?.stair) return null;
+  const v = RULES.rules.find((r: { id: string }) => r.id === "ESCAPE-STAIR-WIDTH").values;
+  const decks = sortedDecks(design);
+  const i0 = decks.findIndex((d) => d.id === s.deckId);
+  const i1 = decks.findIndex((d) => d.id === (s.topDeckId ?? s.deckId));
+  const lo = Math.min(i0, i1),
+    hi = Math.max(i0, i1);
+  if (lo < 0 || hi <= lo) return <KV k="Climbs" v="0 (top deck = bottom deck)" />;
+  let maxStep = 0;
+  for (let i = lo; i < hi; i++) maxStep = Math.max(maxStep, decks[i + 1].z - decks[i].z);
+  const flight = maxStep / Math.max(1, s.stair.flightsPerDeck);
+  const foreAft = s.stair.orientation === "fore-aft";
+  const needAlong = flight / Math.tan((v.max_inclination_deg * Math.PI) / 180);
+  const needAcross = ((s.stair.flightsPerDeck > 1 ? 2 : 1) * s.stair.widthMm) / 1000;
+  return (
+    <>
+      <KV k="Climbs" v={`${(decks[hi].z - decks[lo].z).toFixed(1)} m, ${decks[lo].name} to ${decks[hi].name}`} />
+      <KV k="Each flight climbs" v={flight.toFixed(2)} unit="m" />
+      <KV k={`Length needed / actual ${foreAft ? "(x)" : "(y)"}`} v={`${needAlong.toFixed(2)} / ${(foreAft ? s.length : s.breadth).toFixed(2)}`} unit="m" />
+      <KV k={`Width needed / actual ${foreAft ? "(y)" : "(x)"}`} v={`${needAcross.toFixed(2)} / ${(foreAft ? s.breadth : s.length).toFixed(2)}`} unit="m" />
+    </>
+  );
+}
+
 export function Inspector() {
   const sel = useStore((s) => s.selection);
   if (!sel) return <EmptyInspector />;
@@ -175,7 +202,18 @@ function SpaceInspector({ id }: { id: string }) {
           />
           <Num label="Flights per deck" value={s.stair.flightsPerDeck} step={1} min={1} digits={0} onChange={(v) => up((t) => void (t.stair!.flightsPerDeck = Math.max(1, Math.round(v))))} />
           <Check label="Handrails both sides" value={s.stair.handrailsBothSides} onChange={(v) => up((t) => void (t.stair!.handrailsBothSides = v))} />
-          {analysis?.evac?.stairs.find((x) => x.stairId === id) && <KV k="Persons using this stair" v={analysis.evac.stairs.find((x) => x.stairId === id)!.persons} />}
+          <StairFit design={design} id={id} />
+          {(() => {
+            const load = analysis?.evac?.stairs.find((x) => x.stairId === id);
+            if (!load) return null;
+            return (
+              <>
+                <KV k="Persons using this stair" v={load.persons} />
+                <KV k="People arriving" v={load.FcIn.toFixed(1)} unit="persons/s" />
+                <KV k={`Stair passes (going ${load.up ? "up" : "down"})`} v={load.FcOut.toFixed(1)} unit="persons/s" />
+              </>
+            );
+          })()}
         </Section>
       )}
 

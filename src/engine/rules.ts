@@ -349,8 +349,11 @@ export function escapeStairWidth(ctx: RuleContext): RuleResult {
         limit: `${v.persons_needing_fore_aft_alignment}`,
       });
     const ids = spaceDeckIds(design, s);
+    const deckName = (id: string) => design.decks.find((d) => d.id === id)?.name ?? id;
+    let maxFlightRise = 0;
     for (let i = 0; i < ids.length - 1; i++) {
       const rise = ((deckZ.get(ids[i + 1]) ?? 0) - (deckZ.get(ids[i]) ?? 0)) / Math.max(1, st.flightsPerDeck);
+      maxFlightRise = Math.max(maxFlightRise, rise);
       if (rise > v.max_rise_without_landing_m)
         findings.push({
           status: "red",
@@ -370,6 +373,54 @@ export function escapeStairWidth(ctx: RuleContext): RuleResult {
         fix: `Select it and set its top deck.`,
         targets: [s.id],
       });
+    if (v.stair_must_fit_in_stairwell) {
+      // The stair flights must physically fit inside the stairwell box.
+      const foreAft = st.orientation === "fore-aft";
+      const along = foreAft ? s.length : s.breadth;
+      const across = foreAft ? s.breadth : s.length;
+      const lanes = st.flightsPerDeck > 1 ? 2 : 1; // two or more flights fold back side by side
+      const needAcross = (lanes * st.widthMm) / 1000;
+      const needAlong = maxFlightRise / Math.tan((v.max_inclination_deg * Math.PI) / 180);
+      if (needAlong > along + 0.01)
+        findings.push({
+          status: "red",
+          message: `${s.name} is too short for its height: each flight climbs ${fmt(maxFlightRise, 2)} m but the stairwell is only ${m1(along)} long.`,
+          detail: `FSS Code 13.2.2.3: a flight may be at most ${v.max_inclination_deg} degrees steep. At that slope a flight that climbs ${fmt(maxFlightRise, 2)} m needs at least ${fmt(needAlong, 2)} m of length ${foreAft ? "fore and aft" : "across the ship"}. A shorter stairwell means a stair steeper than allowed.`,
+          fix: `Make ${s.name} at least ${fmt(Math.ceil(needAlong * 10) / 10, 1)} m ${foreAft ? "long (Length)" : "wide (Breadth)"}${st.flightsPerDeck === 1 ? `, or set "Flights per deck" to 2 so each flight climbs half the height` : ""}.`,
+          targets: [s.id],
+          measured: m1(along),
+          limit: `${fmt(needAlong, 2)} m`,
+        });
+      if (needAcross > across + 0.01)
+        findings.push({
+          status: "red",
+          message: `${s.name}'s ${st.widthMm} mm clear width does not fit: ${lanes === 2 ? `its flights sit side by side and need ${m1(needAcross)}` : `it needs ${m1(needAcross)}`}, but the stairwell is only ${m1(across)} ${foreAft ? "wide" : "long"}.`,
+          detail: `The clear width is the free space between handrails on each flight. ${lanes === 2 ? `With ${st.flightsPerDeck} flights per deck the flights fold back and run next to each other, so the stairwell must hold two of them.` : "The stairwell must be at least as wide as the flight."} Otherwise the width used in the width and evacuation checks is not real.`,
+          fix: `Make ${s.name} at least ${fmt(Math.ceil(needAcross * 10) / 10, 1)} m ${foreAft ? "wide (Breadth)" : "long (Length)"}, or lower its clear width.`,
+          targets: [s.id],
+          measured: m1(across),
+          limit: m1(needAcross),
+        });
+    }
+    if (v.stair_needs_door_at_top_and_bottom && ids.length >= 2) {
+      // A stair that ends on a deck without a door leads nowhere there.
+      const conns = ctx.graph.bySpace.get(s.id) ?? [];
+      const ends = [ids[0], ids[ids.length - 1]];
+      for (const dId of ends) {
+        if (conns.some((c) => c.deckId === dId)) continue;
+        const withDoor = ids.filter((x) => conns.some((c) => c.deckId === x));
+        const isTop = dId === ids[ids.length - 1];
+        findings.push({
+          status: "amber",
+          message: `${s.name} goes ${isTop ? "up" : "down"} to ${deckName(dId)} but has no door there.`,
+          detail: `Nobody can get on or off the stair on ${deckName(dId)}, so that part of the stair is useless for escape.${withDoor.length ? ` It has doors on ${withDoor.map(deckName).join(", ")}.` : " It has no door on any deck."}`,
+          fix: withDoor.length
+            ? `Add a door on ${deckName(dId)} between ${s.name} and a corridor, or set its ${isTop ? '"Top deck"' : '"Deck" (bottom deck)'} to ${deckName(isTop ? withDoor[withDoor.length - 1] : withDoor[0])}.`
+            : `Add doors between ${s.name} and a corridor on each deck it serves (select it and press "Auto doors").`,
+          targets: [s.id],
+        });
+      }
+    }
     if (v.handrails_both_sides && !st.handrailsBothSides)
       findings.push({
         status: "red",
