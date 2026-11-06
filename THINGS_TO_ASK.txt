@@ -52,6 +52,17 @@ Q9  Weights
     Can you share a typical lightship weight and KG for a ship like the demo, or a weight group
     breakdown, so the early estimate can be calibrated? The vessel.js Parsons estimate is rough.
 
+Q10 Weight margins (rule WEIGHT-MARGIN)
+    Which weight margins do you keep in early design?
+    Now: design and build margin 6.8 % of lightship, service life margin 4.5 % (NOAA SWATH report 1990,
+    Tables 1 and 8, NAVSEA practice). After adding them the freeboard must stay above 0.5 m (our value) and
+    GM above the intact stability minimum.
+
+Q11 Reference sizes (rule REFERENCE-SHIPS, amber hints only)
+    What are your smallest cabin area per person and deck-to-deck height for ferries and cruise ships?
+    Now: 7.5 m2 per person (2-person cabins of 15 m2 on GA 23007) and 2.5 m between decks (G.O. Sars).
+    These come from research vessels, so passenger cabins may legitimately be smaller.
+
 DOCUMENTS STILL MISSING
 - (done) US Coast Guard stair guideline is in docs/.
 - SOLAS II-1/7-3 permeability table, IS Code 2008 Part A, SOLAS III/21: needed to move Q5 to Q7

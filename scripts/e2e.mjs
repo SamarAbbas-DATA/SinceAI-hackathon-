@@ -73,6 +73,7 @@ async function main() {
     await sleep(250);
   }
   check("app loads and analysis runs", await ev(`!!${S}.analysis && ${S}.analysis.errors.length === 0`));
+  check("starts from the default demo ferry", await ev(`${S}.design.name.startsWith('Demo') && ${S}.design.spaces.length === 115`), await ev(`${S}.design.name + ', ' + ${S}.design.spaces.length + ' spaces'`));
   await sleep(1800); // the guided tour opens itself on a first visit; close it so it does not cover the 3D view
   check("guided tour opens on the first visit", (await ev(`${S}.tourStep`)) === 0);
   await shot("tour");
@@ -146,6 +147,28 @@ async function main() {
   check("Ctrl+Z undoes the move", Math.abs(xUndo - 96) < 0.01, `x = ${xUndo}`);
   await sleep(500);
   await shot("design-plan");
+
+  // a room in the water (outside the hull) is refused
+  await ev(`${S}.set({ tool: { kind: 'space', type: 'tank' } })`);
+  const nw0 = await ev(`${S}.design.spaces.length`);
+  await click(await ev(`window.__project(60, 24, 9.02)`));
+  const wetToast = await ev(`${S}.toast?.text ?? ''`);
+  check("placing a tank outside the hull is refused", (await ev(`${S}.design.spaces.length`)) === nw0 && /outside the hull/.test(wetToast), wetToast.slice(0, 70));
+
+  // emergency door tool: a click near the wall between two cabins (no door there yet) adds a connecting door
+  await ev(`${S}.set({ tool: { kind: 'door' } })`);
+  const d0 = await ev(`${S}.design.doors.length`);
+  const dp = await ev(`window.__project(28.4, 3.2, 9.02)`);
+  await mouse("mouseMoved", dp.x, dp.y);
+  await sleep(300);
+  await shot("door-preview");
+  await click(dp);
+  await sleep(700);
+  const d1 = await ev(`${S}.design.doors.length`);
+  const conn = await ev(`(() => { const d = ${S}.design.doors.at(-1); const c = ${S}.analysis.graph.conns.find(k => k.id === d.id); return c ? [c.a, c.b].sort().join(' + ') : 'none'; })()`);
+  check("emergency door tool adds a door that connects two rooms", d1 === d0 + 1 && conn === 'D3-cabP24 + D3-cabP28', conn);
+  await ev(`${S}.undo(); ${S}.set({ tool: { kind: 'select' } })`);
+  await sleep(400);
 
   // test mode: waves
   await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: '3d' })); ${S}.set({ mode: 'test', panel: 'test' }); ${S}.setTest({ kind: 'sea', running: true, restart: Date.now() })`);

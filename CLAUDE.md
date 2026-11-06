@@ -33,7 +33,9 @@
 - Water is a polygon wireframe (displaced quad grid, crests brighter), not a liquid surface.
 
 ## Conventions
-- Spaces must never overlap: use `editSpace()` / `overlapsWith()` for any edit that moves or resizes a space.
+- Spaces must never overlap: use `editSpace()` / `overlapsWith()` for any edit that moves or resizes a space. A space whose centre is outside the hull is refused too (`centreOutsideHull`).
+- Doors are called "emergency doors" in the UI; every door counts as an exit in the escape and evacuation checks.
+- The app always starts from the default demo ferry (`demoDesign()`); keep its existing flags as a showcase. The previous session is only restored from File.
 - Physics changes need an analytic test. Interaction changes need `npm run e2e`.
 - No emojis in UI text or docs.
 - Keep it light: build on vessel.js and existing libraries.

@@ -11,7 +11,7 @@ import type { GZResult } from "./stability";
 import { gzAt } from "./stability";
 import type { Condition } from "./vessel";
 import type { Ship } from "../vendor/vessel/vessel.module.js";
-import { halfBreadthAt, spaceDeckIds, boundedWaterline } from "./vessel";
+import { halfBreadthAt, spaceDeckIds, boundedWaterline, grownCondition, sortedDecks } from "./vessel";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const RULES: any = rulesJson;
@@ -421,6 +421,23 @@ export function escapeStairWidth(ctx: RuleContext): RuleResult {
         });
       }
     }
+    if (v.door_to_stair_at_least_stair_width) {
+      // REG13 guidance G5.1: doorways serving a stairway should be at least as wide as the stair.
+      const narrow = (ctx.graph.bySpace.get(s.id) ?? []).filter((c) => !c.virtual && c.b !== OUTSIDE && c.a !== OUTSIDE && c.widthMm < st.widthMm);
+      if (narrow.length) {
+        const widths = [...new Set(narrow.map((c) => c.widthMm))].sort((a, b) => a - b);
+        const decks = [...new Set(narrow.map((c) => deckName(c.deckId)))];
+        findings.push({
+          status: "amber",
+          message: `${plural(narrow.length, "emergency door")} into ${s.name} ${narrow.length === 1 ? "is" : "are"} ${widths.join(" or ")} mm wide, narrower than the ${st.widthMm} mm stair.`,
+          detail: `${v.door_to_stair_clause}. A narrow door in front of a wide stair becomes the bottleneck, so the stair cannot be used at its full width. On ${decks.join(", ")}.`,
+          fix: `Select each door into ${s.name} and set its clear width to ${st.widthMm} mm, or reduce the stair's clear width (not below ${v.min_width_mm_uscg_fss} mm).`,
+          targets: [s.id, ...narrow.map((c) => c.id)],
+          measured: `${widths[0]} mm`,
+          limit: `${st.widthMm} mm`,
+        });
+      }
+    }
     if (v.handrails_both_sides && !st.handrailsBothSides)
       findings.push({
         status: "red",
@@ -631,6 +648,121 @@ export function lsaCapacity(ctx: RuleContext): RuleResult {
   return result("LSA-CAPACITY", findings, `Lifeboats port ${port}, starboard ${stbd}, liferafts ${rafts} places for ${N} persons.`);
 }
 
+// ------------------------------------------------------------------ WEIGHT-MARGIN
+export function weightMargin(ctx: RuleContext): RuleResult {
+  const v = ruleDef("WEIGHT-MARGIN").values;
+  const { condition, ship } = ctx;
+  if (!condition || !ship) return result("WEIGHT-MARGIN", [], "Hull or loading condition not ready.", "grey");
+  if (condition.overloaded) return result("WEIGHT-MARGIN", [], "The ship is already too heavy; fix that first (see the stability check).", "grey");
+  const LS = condition.weights.lightship.massT;
+  const dDesign = LS * v.design_build_margin_share_of_lightship;
+  const dService = (LS + dDesign) * v.service_life_margin_share_of_lightship;
+  const dW = dDesign + dService;
+  const g = grownCondition(ship, condition, dW);
+  const gmMin: number = ruleDef("INTACT-STABILITY").values.min_initial_gm_m;
+  const pct = (100 * dW) / LS;
+  const findings: Finding[] = [];
+  const how = `Margin = ${fmt(v.design_build_margin_share_of_lightship * 100)} % of lightship for design and build (${fmt(dDesign, 0)} t) plus ${fmt(v.service_life_margin_share_of_lightship * 100)} % for growth in service (${fmt(dService, 0)} t), added at the lightship centre of gravity (KG ${m1(condition.weights.lightship.kg)}). Draft is solved again on the hull: the ship sinks ${fmt(g.sinkage * 100, 0)} cm.`;
+  if (g.overloaded || g.freeboard < 0)
+    findings.push({
+      status: "red",
+      message: `With the usual weight margin (${fmt(dW, 0)} t) the deck edge goes under water.`,
+      detail: `${how} Freeboard would be ${fmt(g.freeboard, 2)} m. There is no room for the weight growth every ship sees.`,
+      fix: `Reduce weight now, or give the hull more volume (deeper or wider in the Design tab).`,
+      targets: [],
+      measured: `${fmt(g.freeboard, 2)} m`,
+      limit: `${v.min_freeboard_after_margin_m} m`,
+    });
+  else if (g.freeboard < v.min_freeboard_after_margin_m)
+    findings.push({
+      status: "amber",
+      message: `With the usual weight margin (${fmt(dW, 0)} t) freeboard drops to ${fmt(g.freeboard, 2)} m.`,
+      detail: `${how} Below ${v.min_freeboard_after_margin_m} m the deck edge is close to the water and the ship loses stability at small angles.`,
+      fix: `Keep weight down or add depth to the hull so the freeboard stays above ${v.min_freeboard_after_margin_m} m after the margin.`,
+      targets: [],
+      measured: `${fmt(g.freeboard, 2)} m`,
+      limit: `${v.min_freeboard_after_margin_m} m`,
+    });
+  if (!g.overloaded && g.GMt < gmMin)
+    findings.push({
+      status: "red",
+      message: `With the usual weight margin GM drops to ${fmt(g.GMt, 2)} m, below the ${gmMin} m minimum.`,
+      detail: `${how} The extra weight sits at the lightship height, so the centre of gravity moves from ${m1(condition.KG)} to ${m1(g.KG)}.`,
+      fix: `Lower the centre of gravity (heavy rooms and tanks lower down) or widen the hull, so GM keeps a margin.`,
+      targets: [],
+      measured: `${fmt(g.GMt, 2)} m`,
+      limit: `${gmMin} m`,
+    });
+  return result(
+    "WEIGHT-MARGIN",
+    findings,
+    `With ${fmt(pct)} % extra lightship weight (${fmt(dW, 0)} t) the ship sinks ${fmt(g.sinkage * 100, 0)} cm: freeboard ${fmt(condition.freeboard, 2)} to ${fmt(g.freeboard, 2)} m, GM ${fmt(condition.GMt, 2)} to ${fmt(g.GMt, 2)} m.`,
+  );
+}
+
+// ------------------------------------------------------------------ REFERENCE-SHIPS
+export function referenceShips(ctx: RuleContext): RuleResult {
+  const v = ruleDef("REFERENCE-SHIPS").values;
+  const { design, evac } = ctx;
+  const findings: Finding[] = [];
+  // 1. Cabin floor area per person
+  const cabins = design.spaces.filter((s) => s.type === "cabin" && s.persons > 0);
+  const small = cabins.filter((s) => (s.length * s.breadth) / s.persons < v.min_cabin_area_per_person_m2 - 1e-6);
+  if (small.length) {
+    const worstC = small.reduce((a, b) => ((a.length * a.breadth) / a.persons <= (b.length * b.breadth) / b.persons ? a : b));
+    const per = (worstC.length * worstC.breadth) / worstC.persons;
+    findings.push({
+      status: "amber",
+      message: small.length === 1 ? `${worstC.name} gives each person only ${fmt(per)} m2.` : `${small.length} cabins give each person less than ${v.min_cabin_area_per_person_m2} m2 (smallest: ${worstC.name}, ${fmt(per)} m2).`,
+      detail: `${worstC.name} is ${fmt(worstC.length * worstC.breadth)} m2 for ${worstC.persons} persons. On the reference ships the smallest cabins give ${v.min_cabin_area_per_person_m2} m2 per person (${v.cabin_area_note}). The persons number also drives the evacuation check, so check it is realistic.`,
+      fix: `Lower "Persons" or make the cabin larger. Passenger cabins can be smaller than on research ships; confirm your own minimum.`,
+      targets: small.map((s) => s.id),
+      measured: `${fmt(per)} m2`,
+      limit: `${v.min_cabin_area_per_person_m2} m2`,
+    });
+  }
+  // 2. Height between neighbouring decks
+  const decks = sortedDecks(design);
+  for (let i = 0; i < decks.length - 1; i++) {
+    const h = decks[i + 1].z - decks[i].z;
+    if (h < v.min_deck_height_m - 1e-6)
+      findings.push({
+        status: "amber",
+        message: `${decks[i].name} and ${decks[i + 1].name} are only ${fmt(h, 2)} m apart.`,
+        detail: `This is the full height from deck to deck, before deck plating, beams, ducts and ceilings take their share. The reference ships use at least ${v.min_deck_height_m} m (${v.deck_height_note}).`,
+        fix: `Raise ${decks[i + 1].name} (Design tab) so the decks are at least ${v.min_deck_height_m} m apart.`,
+        targets: [],
+        measured: `${fmt(h, 2)} m`,
+        limit: `${v.min_deck_height_m} m`,
+      });
+  }
+  // 3. Escape routes that pass through rooms
+  if (evac?.ok) {
+    const through = new Map<string, string[]>();
+    for (const [from, r] of evac.assignments)
+      for (const st of r.steps.slice(0, -1)) {
+        const sp = design.spaces.find((x) => x.id === st.space);
+        if (sp && sp.id !== from && v.rooms_not_passageways.includes(sp.type)) through.set(sp.id, [...(through.get(sp.id) ?? []), from]);
+      }
+    for (const [roomId, froms] of through) {
+      const room = design.spaces.find((x) => x.id === roomId)!;
+      const names = froms.map((id) => design.spaces.find((x) => x.id === id)?.name ?? id);
+      findings.push({
+        status: "amber",
+        message: `The escape route from ${names.length === 1 ? names[0] : `${names.length} rooms`} leads through ${room.name}.`,
+        detail: `${v.passageway_note}. A ${typeName(room.type)} can be locked, full of furniture or the place where the fire starts, so people should not have to cross it to escape.${names.length > 1 ? ` Rooms using it: ${names.slice(0, 4).join(", ")}${names.length > 4 ? " and more" : ""}.` : ""}`,
+        fix: `Give ${names.length === 1 ? names[0] : "those rooms"} a door straight onto a corridor or stairwell, or turn ${room.name} into a corridor.`,
+        targets: [roomId, ...froms],
+      });
+    }
+  }
+  return result(
+    "REFERENCE-SHIPS",
+    findings,
+    findings.length ? `${plural(findings.length, "hint")} from comparing with three real research ships.` : `Cabin sizes, deck heights and escape routes look like those on the reference ships.`,
+  );
+}
+
 export const RULE_FUNCS: Record<string, (ctx: RuleContext) => RuleResult> = {
   "FIRE-ZONE-SIZE": fireZoneSize,
   "FIRE-WALL-RATING": fireWallRating,
@@ -640,6 +772,8 @@ export const RULE_FUNCS: Record<string, (ctx: RuleContext) => RuleResult> = {
   "FLOOD-SURVIVAL": floodSurvival,
   "INTACT-STABILITY": intactStability,
   "LSA-CAPACITY": lsaCapacity,
+  "WEIGHT-MARGIN": weightMargin,
+  "REFERENCE-SHIPS": referenceShips,
 };
 
 export function runRules(ctx: RuleContext): RuleResult[] {

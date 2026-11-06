@@ -4,7 +4,7 @@ import { FindingRow } from "./panels";
 import { SPACE_TYPES, FIRE_RATINGS, TANK_CONTENTS, pairKey, type FireRating, type SpaceType, type Design, type Door, type TransverseBulkhead, type LSA } from "../engine/types";
 import { sharedEdges, OUTSIDE, overlapsWith } from "../engine/topology";
 import { requiredMinutes, RULES } from "../engine/rules";
-import { sortedDecks, OUTFIT_KG_PER_M2, LIQUID_DENSITY, TANK_STRUCTURE_FACTOR, spaceVertical } from "../engine/vessel";
+import { sortedDecks, OUTFIT_KG_PER_M2, LIQUID_DENSITY, TANK_STRUCTURE_FACTOR, spaceVertical, centreOutsideHull } from "../engine/vessel";
 import { autoDoors } from "../engine/generators";
 import { TYPE_LABEL, TYPE_COLOR, TYPE_ICON } from "./theme";
 import { focusOn } from "./three/Viewport";
@@ -103,7 +103,8 @@ function SpaceInspector({ id }: { id: string }) {
     for (const dx of [s.length, -s.length, 0, 0]) {
       for (const dy of dx === 0 ? [s.breadth, -s.breadth] : [0]) {
         const probe = { ...copy, xCentre: s.xCentre + dx, yCentre: s.yCentre + dy };
-        if (!overlapsWith(design, probe).length) {
+        const ship = useStore.getState().analysis?.ship;
+        if (!overlapsWith(design, probe).length && !(ship && centreOutsideHull(design, ship, probe))) {
           edit((d) => void d.spaces.push(probe));
           useStore.getState().select({ kind: "space", id: nid });
           return;
@@ -254,7 +255,7 @@ function SpaceInspector({ id }: { id: string }) {
       </Section>
 
       <Section
-        title="Doors and openings"
+        title="Emergency doors and openings"
         right={
           <Btn
             onClick={() => {
@@ -268,10 +269,10 @@ function SpaceInspector({ id }: { id: string }) {
           </Btn>
         }
       >
-        {conns.length === 0 && <p className="text-xs text-bad">No doors. Press "Auto doors" or use the Door tool on a wall.</p>}
+        {conns.length === 0 && <p className="text-xs text-bad">No emergency doors. Press "Auto doors" or use the Emergency door tool (D) on a wall.</p>}
         {conns.map(({ c, other }) => (
           <div key={c.id} className="flex justify-between py-0.5 text-xs">
-            <span>{c.virtual ? "Open connection" : `Door ${c.widthMm} mm`}</span>
+            <span>{c.virtual ? "Open connection" : `Emergency door ${c.widthMm} mm`}</span>
             <span className="text-muted">to {other === OUTSIDE ? "nothing (check its position)" : (byId.get(other)?.name ?? other)}</span>
           </div>
         ))}
@@ -301,7 +302,7 @@ function DoorInspector({ id }: { id: string }) {
     });
   return (
     <Section
-      title="Door"
+      title="Emergency door"
       right={
         <Btn kind="danger" onClick={() => deleteSelection()}>
           Delete
@@ -312,7 +313,19 @@ function DoorInspector({ id }: { id: string }) {
       <Num label="x" value={d.x} unit="m" step={0.1} onChange={(v) => up((t) => (t.x = v))} />
       <Num label="y" value={d.y} unit="m" step={0.1} onChange={(v) => up((t) => (t.y = v))} />
       <Num label="Clear width" value={d.widthMm} unit="mm" step={50} min={500} digits={0} onChange={(v) => up((t) => (t.widthMm = v))} />
-      <p className="mt-2 text-xs">{conn && conn.b !== OUTSIDE ? `Connects ${name(conn.a)} and ${name(conn.b)}.` : <span className="text-warn">Not on a wall between two spaces, so it does not count as an exit.</span>}</p>
+      {(() => {
+        // REG13 guidance G5.1: a door into a stairway should be at least as wide as the stair
+        const stair = conn ? [conn.a, conn.b].map((sid) => design.spaces.find((s) => s.id === sid)).find((s) => s?.type === "stairwell") : undefined;
+        const need = stair?.stair?.widthMm ?? 0;
+        if (!stair || d.widthMm >= need) return null;
+        return (
+          <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+            <span className="text-warn">Narrower than {stair.name} ({need} mm).</span>
+            <Btn onClick={() => up((t) => (t.widthMm = need))}>Set to {need} mm</Btn>
+          </div>
+        );
+      })()}
+      <p className="mt-2 text-xs">{conn && conn.b !== OUTSIDE ? `Connects ${name(conn.a)} and ${name(conn.b)}. Every door counts as an emergency exit in the escape and evacuation checks.` : <span className="text-warn">Not on a wall between two spaces, so it does not count as an exit.</span>}</p>
     </Section>
   );
 }

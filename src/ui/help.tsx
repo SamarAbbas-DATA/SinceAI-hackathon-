@@ -82,7 +82,7 @@ export function GuidePanel() {
             <b>Pick a space</b> in the build bar at the bottom (or press 1 to 9) and click on the deck. A red preview means it would overlap something.
           </li>
           <li>
-            <b>Connect it</b>: select the space and press <i>Auto doors</i>, or use the Door tool. Stamps place a whole cabin block or stair core at once.
+            <b>Connect it</b>: select the space and press <i>Auto doors</i>, or use the Emergency door tool (D). Stamps place a whole cabin block or stair core at once.
           </li>
           <li>
             <b>Add bulkheads</b>: watertight ones for flooding, fire zone ones for main vertical zones.
@@ -151,11 +151,13 @@ const METHOD: Record<string, string> = {
   "FIRE-ZONE-SIZE": "Hull outline at each deck height from the vessel.js offsets; zone mean width = waterplane area of the zone / its length.",
   "FIRE-WALL-RATING": "Shared walls found geometrically between touching spaces; required rating looked up per room-type pair.",
   "ESCAPE-TWO-EXITS": "Graph of spaces and doors; maximum number of routes that share no door or space (max-flow); dead ends measured along each corridor.",
-  "ESCAPE-STAIR-WIDTH": "Stair properties compared with limits; persons per stair from the evacuation assignment.",
+  "ESCAPE-STAIR-WIDTH": "Stair properties compared with limits; persons per stair from the evacuation assignment; flights must fit in the stairwell at 45 degrees; emergency doors into a stair at least as wide as the stair.",
   "EVACUATION-TIME": "MSC.1/Circ.1533 Annex 2 hydraulic model: densities, specific flows, queues at stairs, travel times.",
   "FLOOD-SURVIVAL": "Lost-buoyancy method with vessel.js waterplane integration for each single and adjacent-pair damage.",
   "INTACT-STABILITY": "GZ curve by integrating heeled hull sections at constant displacement, free-surface correction included.",
   "LSA-CAPACITY": "Sum of lifeboat capacity per side and liferaft capacity compared with persons on board.",
+  "WEIGHT-MARGIN": "Margin weight added at the lightship centre of gravity; draft solved again on the vessel.js hull; new freeboard and GM compared with the limits.",
+  "REFERENCE-SHIPS": "Cabin floor area per person, deck-to-deck heights and the rooms each escape route passes through, compared with three real research ships.",
 };
 
 export function SourcesPanel() {
@@ -179,20 +181,22 @@ export function SourcesPanel() {
         ))}
       </Section>
       <Section title="Documents">
-        {RULES.sources.map((s: { id: string; name: string; url: string }) => {
-          const local = DOC_FILES[s.id];
+        {RULES.sources.map((s: { id: string; name: string; url?: string; file?: string }) => {
+          const local = DOC_FILES[s.id] ?? s.file;
           return (
             <div key={s.id} className="mb-1.5 text-[11px]">
               <div className="text-fg">{s.name}</div>
               <div className="flex gap-3">
                 {local && (
-                  <a className="text-accent underline" href={`/${local}`} target="_blank" rel="noreferrer">
+                  <a className="text-accent underline" href={`/${encodeURI(local)}`} target="_blank" rel="noreferrer">
                     Local PDF
                   </a>
                 )}
-                <a className="text-muted underline" href={s.url} target="_blank" rel="noreferrer">
-                  Original
-                </a>
+                {s.url && (
+                  <a className="text-muted underline" href={s.url} target="_blank" rel="noreferrer">
+                    Original
+                  </a>
+                )}
               </div>
             </div>
           );

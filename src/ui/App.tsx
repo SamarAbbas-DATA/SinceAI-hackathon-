@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { useStore, type Panel, type Tool, type TestKind } from "./store";
+import { useStore, previousSession, hasPreviousSession, type Panel, type Tool, type TestKind } from "./store";
 import { Viewport, focusOn } from "./three/Viewport";
 import { Inspector, deleteSelection } from "./Inspector";
 import { IssuesPanel, HydroPanel, StabilityPanel, DamagePanel, EvacPanel, PerformancePanel, DesignPanel } from "./panels";
 import { GuidePanel, SourcesPanel, Tour } from "./help";
 import { TestPanel } from "./TestPanel";
-import { TYPE_COLOR, TYPE_LABEL, TYPE_ICON, STATUS_VAR, LSA_COLOR } from "./theme";
-import { sortedDecks, spaceVertical } from "../engine/vessel";
+import { TYPE_COLOR, TYPE_LABEL, TYPE_ICON, STATUS_VAR, LSA_COLOR, EXIT_COLOR } from "./theme";
+import { sortedDecks, spaceVertical, centreOutsideHull } from "../engine/vessel";
 import { exportDesign, exportVesselSpec, parseDesign, parseOffsetsCSV, applyOffsets } from "../engine/io";
 import { demoDesign, blankDesign } from "../data/demoDesign";
 import { sharedEdges, overlapsWith } from "../engine/topology";
@@ -206,7 +206,15 @@ export function App() {
   const menus: Record<string, { label: string; onClick: () => void; hint?: string; disabled?: boolean; sep?: boolean }[]> = {
     File: [
       { label: "New empty design", onClick: () => confirm("Start a new empty design? You can undo this.") && st.load(blankDesign()) },
-      { label: "Load demo ferry", onClick: () => st.load(demoDesign()) },
+      { label: "Load demo ferry (default)", onClick: () => st.load(demoDesign()) },
+      {
+        label: "Restore last session",
+        onClick: () => {
+          const prev = previousSession();
+          if (prev) st.load(prev);
+        },
+        disabled: !hasPreviousSession(),
+      },
       { label: "Open design or vessel.js file", hint: ".json", onClick: () => fileRef.current?.click(), sep: true },
       { label: "Import hull offsets", hint: ".csv", onClick: () => csvRef.current?.click() },
       { label: "Import 3D reference model", hint: ".stl .obj .glb", onClick: () => meshRef.current?.click() },
@@ -238,7 +246,7 @@ export function App() {
       ...PALETTE.map((t, i) => ({ label: TYPE_LABEL[t], hint: i < 10 ? String((i + 1) % 10) : "", onClick: () => st.set({ tool: { kind: "space", type: t } }) })),
       { label: "Cabin block", hint: "B", onClick: () => st.set({ tool: { kind: "stamp", stamp: "cabin_block" } }), sep: true },
       { label: "Stair core", hint: "K", onClick: () => st.set({ tool: { kind: "stamp", stamp: "stair_core" } }) },
-      { label: "Door", hint: "D", onClick: () => st.set({ tool: { kind: "door" } }), sep: true },
+      { label: "Emergency door", hint: "D", onClick: () => st.set({ tool: { kind: "door" } }), sep: true },
       { label: "Watertight bulkhead", hint: "W", onClick: () => st.set({ tool: { kind: "bulkhead", bk: "watertight" } }) },
       { label: "Fire zone bulkhead", hint: "Z", onClick: () => st.set({ tool: { kind: "bulkhead", bk: "fire_zone" } }) },
       { label: "Lifeboat", hint: "L", onClick: () => st.set({ tool: { kind: "lsa", lsa: "lifeboat" } }) },
@@ -420,7 +428,7 @@ export function App() {
           <span>No loading condition</span>
         )}
         <span className="ml-auto text-faint">
-          {st.design.spaces.length} spaces, {st.design.doors.length} doors, {st.design.bulkheads.length} bulkheads, {st.design.lsa.length} survival craft
+          {st.design.spaces.length} spaces, {st.design.doors.length} emergency doors, {st.design.bulkheads.length} bulkheads, {st.design.lsa.length} survival craft
         </span>
       </footer>
       <Tour />
@@ -448,6 +456,7 @@ function duplicateSelected() {
   ]) {
     const copy = { ...structuredClone(sp), id, name: `${sp.name} copy`, xCentre: sp.xCentre + dx, yCentre: sp.yCentre + dy };
     if (overlapsWith(st.design, copy).length) continue;
+    if (st.analysis?.ship && centreOutsideHull(st.design, st.analysis.ship, copy)) continue; // would sit in the water
     st.edit((d) => void d.spaces.push(copy));
     st.select({ kind: "space", id });
     return;
@@ -471,7 +480,7 @@ function toolHint(t: Tool): string {
     case "space":
       return `${TYPE_LABEL[t.type]}: click on the deck to place. A red outline means it would overlap.`;
     case "door":
-      return "Door: click near a wall between two spaces.";
+      return "Emergency door: click near a wall between two rooms. Green preview = it connects them, amber = outer wall.";
     case "bulkhead":
       return `${t.bk === "watertight" ? "Watertight" : "Fire zone"} bulkhead: click to place it across the ship.`;
     case "lsa":
@@ -532,7 +541,7 @@ function ToolRail() {
   const is = (t: Tool) => JSON.stringify(t) === JSON.stringify(st.tool);
   const items: { t: Tool; label: string; k: string; icon: string; color?: string }[] = [
     { t: { kind: "select" }, label: "Select and move", k: "V", icon: ICONS.select },
-    { t: { kind: "door" }, label: "Door", k: "D", icon: ICONS.door, color: "#c9a27a" },
+    { t: { kind: "door" }, label: "Emergency door", k: "D", icon: ICONS.door, color: EXIT_COLOR },
     { t: { kind: "bulkhead", bk: "watertight" }, label: "Watertight bulkhead", k: "W", icon: ICONS.watertight, color: "#7aa6d6" },
     { t: { kind: "bulkhead", bk: "fire_zone" }, label: "Fire zone bulkhead", k: "Z", icon: ICONS.fire, color: "#e0803c" },
     { t: { kind: "lsa", lsa: "lifeboat" }, label: "Lifeboat", k: "L", icon: ICONS.lifeboat, color: LSA_COLOR.lifeboat },

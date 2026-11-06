@@ -36,8 +36,9 @@ describe("demo design", () => {
   it("flags the 850 mm stair as red (FSS Code 13.2.1.1 needs 900 mm)", () => {
     const r = a.rules.find((r) => r.ruleId === "ESCAPE-STAIR-WIDTH")!;
     expect(r.status).toBe("red");
-    expect(r.findings[0].targets).toEqual(["stairC"]);
-    expect(r.findings[0].detail).toMatch(/dispensation/);
+    const red = r.findings.filter((f) => f.status === "red");
+    expect(red.map((f) => f.targets)).toEqual([["stairC"]]);
+    expect(red[0].detail).toMatch(/dispensation/);
   });
 
   it("escape routes pass: every space or group has two separate ways out", () => {
@@ -99,6 +100,39 @@ describe("targeted edits change the verdicts", () => {
     const f = rule(d, "ESCAPE-STAIR-WIDTH").findings.find((x) => x.targets.includes("stairA") && /no door there/.test(x.message));
     expect(f?.status).toBe("amber");
     expect(f?.message).toContain(top.name);
+  });
+
+  it("an emergency door narrower than its stair is amber (REG13 G5.1)", () => {
+    const d = demoDesign();
+    // the demo stair doors are 900 mm into 1200 mm stairs A and B
+    const f = rule(d, "ESCAPE-STAIR-WIDTH").findings.find((x) => x.targets.includes("stairA") && /narrower than the 1200 mm stair/.test(x.message));
+    expect(f?.status).toBe("amber");
+    d.spaces.find((x) => x.id === "stairA")!.stair!.widthMm = 900;
+    expect(rule(d, "ESCAPE-STAIR-WIDTH").findings.some((x) => x.targets.includes("stairA") && /narrower/.test(x.message))).toBe(false);
+  });
+
+  it("WEIGHT-MARGIN is green on the demo and red when the hull has no reserve", () => {
+    const d = demoDesign();
+    const g = rule(d, "WEIGHT-MARGIN");
+    expect(g.status).toBe("green");
+    expect(g.summary).toMatch(/sinks \d+ cm/);
+    // so much deadweight that the deck is just above water: the margin pushes it under
+    const a = analyze(d, { withCurves: false });
+    d.loading.deadweight.massT += a.condition!.freeboard * a.condition!.hydro.TPC * 100 * 0.97;
+    expect(rule(d, "WEIGHT-MARGIN").status).toBe("red");
+  });
+
+  it("REFERENCE-SHIPS: crowded cabin, low deck and a route through a room give amber hints", () => {
+    const d = demoDesign();
+    expect(rule(d, "REFERENCE-SHIPS").status).toBe("green");
+    d.spaces.find((s) => s.type === "cabin")!.persons = 4; // 16 m2 / 4 = 4 m2 each
+    let r = rule(d, "REFERENCE-SHIPS");
+    expect(r.status).toBe("amber");
+    expect(r.findings[0].message).toMatch(/4\.0 m2/);
+    const d2 = demoDesign();
+    d2.decks.find((x) => x.id === "D5")!.z = 14; // D4 at 12 m
+    r = rule(d2, "REFERENCE-SHIPS");
+    expect(r.findings.some((f) => /only 2\.00 m apart/.test(f.message))).toBe(true);
   });
 
   it("removing the engine room's second exit gives 'only one way out'", () => {
