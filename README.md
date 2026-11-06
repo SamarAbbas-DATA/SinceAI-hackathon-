@@ -80,7 +80,7 @@ Not supported yet: STEP and IGES (they need a large OpenCascade WebAssembly modu
 - GZ uses fixed trim, no downflooding angle, and treats the hull as watertight to the moulded depth. Slack tanks are corrected with the rectangular free-surface formula.
 - Test mode animations are visual: the motions use vessel.js amplitudes as regular sine waves, and the evacuation walk-through ignores queues. The official evacuation number is the Circ.1533 total shown beside it.
 - Damage stability is a simplified lost-buoyancy estimate with full-breadth compartments. It is not the SOLAS II-1 probabilistic calculation.
-- Rules marked "assumed" in `rules.json` use placeholder values that must be confirmed with Meyer Turku. The open questions are in `THINGS_TO_ASK.txt`.
+- Rules marked "assumed" in `rules.json` use placeholder values that must be confirmed with Meyer Turku.  The open questions are in `THINGS_TO_ASK.txt`.
 - vessel.js is no longer maintained. It is vendored with two logging patches and one documented bug workaround (see `src/vendor/vessel/PATCHES.md`).
 
 ## Layout
