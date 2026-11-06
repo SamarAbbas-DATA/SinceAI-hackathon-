@@ -71,6 +71,36 @@ describe("targeted edits change the verdicts", () => {
     expect(rule(d, "ESCAPE-STAIR-WIDTH").status).toBe("red");
   });
 
+  it("a stairwell too short for its flights at 45 degrees is red", () => {
+    // Stair A: Deck 2 (z 6) to Deck 3 (z 9) is a 3 m climb; one flight per deck needs 3 / tan 45 = 3 m of length.
+    const d = demoDesign();
+    const s = d.spaces.find((x) => x.id === "stairA")!;
+    s.stair!.flightsPerDeck = 1;
+    s.stair!.widthMm = 1200;
+    s.length = 2.5;
+    const f = rule(d, "ESCAPE-STAIR-WIDTH").findings.find((x) => x.targets.includes("stairA") && /too short/.test(x.message));
+    expect(f?.status).toBe("red");
+    expect(f?.limit).toBe("3.00 m");
+  });
+
+  it("a clear width that does not fit across the stairwell is red", () => {
+    // two flights side by side at 2.2 m each need 4.4 m, the demo stairwells are 4 m wide
+    const d = demoDesign();
+    d.spaces.find((x) => x.id === "stairA")!.stair!.widthMm = 2200;
+    const f = rule(d, "ESCAPE-STAIR-WIDTH").findings.find((x) => x.targets.includes("stairA") && /does not fit/.test(x.message));
+    expect(f?.status).toBe("red");
+  });
+
+  it("a stair that ends on a deck without a door is flagged", () => {
+    const d = demoDesign();
+    const s = d.spaces.find((x) => x.id === "stairA")!;
+    const top = d.decks.find((x) => x.id === s.topDeckId)!;
+    d.doors = d.doors.filter((x) => !(x.deckId === top.id && Math.abs(x.x - 18) < 0.5 && Math.abs(x.y - 1) < 0.5));
+    const f = rule(d, "ESCAPE-STAIR-WIDTH").findings.find((x) => x.targets.includes("stairA") && /no door there/.test(x.message));
+    expect(f?.status).toBe("amber");
+    expect(f?.message).toContain(top.name);
+  });
+
   it("removing the engine room's second exit gives 'only one way out'", () => {
     const d = demoDesign();
     d.doors = d.doors.filter((x) => !(x.deckId === "D1" && x.y > 0));

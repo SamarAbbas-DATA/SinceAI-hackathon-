@@ -26,7 +26,7 @@
 ## Visual style (from reference_images/: Onshape screenshots, "reference 3d ui" LP5 map video, wave GIF, animation video)
 - Minimal and calm. Neutral charcoal dark theme (default) and warm off-white light theme; no blue cast. One accent: dark orange (`--accent`).
 - Use the tokens in `src/index.css` (`bg`, `surface`, `surface-2`, `line`, `fg`, `muted`, `faint`, `accent`, `bad`, `warn`, `ok`). Do not use raw Tailwind palette colours (sky, rose, slate...) in UI code.
-- Icons are thin monochrome line silhouettes (`Icon` in fields.tsx), no filled backgrounds; they light up in their colour only on hover or when active.
+- Icons are thin monochrome line silhouettes (`Icon` in fields.tsx). On hover or when active, build bar and tool rail icons fade slightly and sit on a soft rounded tile in their own colour at low alpha (`HoverTile` in App.tsx). No other filled backgrounds.
 - Status colours are crisp: small dots, 2 px lines, solid tints. No glow, no pulsing, no filled badges.
 - Text tabs with an accent underline, uppercase micro labels (`.label`), hairline separators instead of cards.
 - Motion: masked wipe reveals (`anim-wipe`), staggered pops (`anim-pop`), rise-in (`anim-rise`), rooms assemble on load, drifting line fragments. Keep it subtle.

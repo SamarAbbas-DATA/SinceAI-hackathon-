@@ -554,9 +554,26 @@ function ToolRail() {
   );
 }
 
+/** Soft rounded tile in the tool's own colour, shown behind an icon on hover or when active (low alpha, not bright). */
+function HoverTile({ color, show, strong = false, className = "" }: { color: string; show: boolean; strong?: boolean; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute rounded-[7px] transition-all duration-200 ${className}`}
+      style={{
+        background: `color-mix(in srgb, ${color} ${strong ? 20 : 14}%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} ${strong ? 38 : 26}%, transparent)`,
+        opacity: show ? 1 : 0,
+        transform: show ? "scale(1)" : "scale(0.85)",
+      }}
+    />
+  );
+}
+
 function RailButton({ active, label, icon, color, onClick, delay = 0 }: { active: boolean; label: string; icon: string; color?: string; onClick: () => void; delay?: number }) {
   const [hover, setHover] = useState(false);
   const lit = active || hover;
+  const tint = color ?? "var(--accent)";
   return (
     <button
       onClick={onClick}
@@ -565,8 +582,9 @@ function RailButton({ active, label, icon, color, onClick, delay = 0 }: { active
       className={`anim-pop relative flex h-9 w-9 items-center justify-center transition-colors ${lit ? "text-fg" : "text-muted"}`}
       style={{ animationDelay: `${delay}ms` }}
     >
+      <HoverTile color={tint} show={lit} strong={active} className="inset-0.5" />
       {active && <span className="absolute top-2 bottom-2 -left-1 w-[2px] rounded bg-accent" />}
-      <Icon d={icon} size={19} style={{ color: lit && color ? color : undefined, transition: "color 0.2s" }} />
+      <Icon d={icon} size={19} className="relative" style={{ color: lit ? tint : undefined, opacity: lit ? 0.7 : 1, transition: "color 0.2s, opacity 0.2s" }} />
       {hover && <span className="anim-wipe pointer-events-none absolute left-11 z-30 rounded border border-line bg-surface px-2 py-1 text-[11px] whitespace-nowrap text-fg shadow-lg">{label}</span>}
     </button>
   );
@@ -575,9 +593,11 @@ function RailButton({ active, label, icon, color, onClick, delay = 0 }: { active
 function ViewToggle({ k, label, icon }: { k: "isolateDeck" | "showHull" | "showWater" | "showBulkheads" | "showRoutes" | "showLabels"; label: string; icon: string }) {
   const on = useStore((s) => s.view[k]);
   const setView = useStore((s) => s.setView);
+  const [hover, setHover] = useState(false);
   return (
-    <button title={label} onClick={() => setView({ [k]: !on })} className={`group relative flex h-8 w-9 items-center justify-center transition-colors ${on ? "text-fg" : "text-faint hover:text-muted"}`}>
-      <Icon d={icon} size={17} />
+    <button title={label} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={() => setView({ [k]: !on })} className={`group relative flex h-8 w-9 items-center justify-center transition-colors ${on ? "text-fg" : "text-faint"}`}>
+      <HoverTile color="var(--fg)" show={hover} className="inset-x-0.5 inset-y-0" />
+      <Icon d={icon} size={17} className="relative" style={{ opacity: hover ? 0.7 : 1, transition: "opacity 0.2s" }} />
       <span className="pointer-events-none absolute left-11 z-30 hidden rounded border border-line bg-surface px-2 py-1 text-[11px] whitespace-nowrap text-fg shadow-lg group-hover:block">
         {label} <span className="text-muted">{on ? "on" : "off"}</span>
       </span>
@@ -612,8 +632,11 @@ function Tile({ active, color, icon, label, hotkey, count, onClick, delay }: { a
   const lit = active || hover;
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} title={hotkey ? `${label}  ${hotkey}` : label} className="anim-pop relative flex w-[60px] flex-col items-center gap-1 pt-1.5 pb-1" style={{ animationDelay: `${delay}ms` }}>
-      <span className="transition-all duration-200" style={{ color: lit ? color : "var(--muted)", transform: lit ? "translateY(-3px)" : "none", filter: active ? `drop-shadow(0 0 6px ${color}66)` : "none" }}>
-        <Icon d={icon} size={21} stroke={1.4} />
+      <span className="relative flex h-8 w-10 items-center justify-center transition-all duration-200" style={{ color: lit ? color : "var(--muted)", transform: lit ? "translateY(-3px)" : "none" }}>
+        <HoverTile color={color} show={lit} strong={active} className="inset-0" />
+        <span className="relative flex transition-opacity duration-200" style={{ opacity: lit ? 0.7 : 1 }}>
+          <Icon d={icon} size={21} stroke={1.4} />
+        </span>
       </span>
       <span className={`w-full truncate text-center text-[10px] leading-tight transition-colors ${lit ? "text-fg" : "text-faint"}`}>{label}</span>
       <span className="h-[3px] w-[3px] rounded-full transition-opacity" style={{ background: color, opacity: active ? 1 : 0 }} />

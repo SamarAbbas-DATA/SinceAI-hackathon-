@@ -96,6 +96,8 @@ function RuleCard({ r, i }: { r: RuleResult; i: number }) {
   const [open, setOpen] = useState(r.status === "red");
   const def = ruleDef(r.ruleId);
   const doc = Object.entries(DOC_FILES).find(([k]) => r.source.includes(k));
+  // No local copy (paid IMO texts, or an EU web page): link to the online source instead.
+  const online = doc ? undefined : (RULES.sources as { id: string; url?: string }[]).find((s) => r.source.includes(s.id) && s.url);
   return (
     <section className="anim-rise border-b border-line" style={{ animationDelay: `${80 + i * 45}ms` }}>
       <button className="group flex w-full items-start gap-3 px-4 py-3 text-left" onClick={() => setOpen(!open)}>
@@ -122,6 +124,11 @@ function RuleCard({ r, i }: { r: RuleResult; i: number }) {
               {doc && (
                 <a className="ml-1 text-accent hover:underline" href={`/${doc[1]}`} target="_blank" rel="noreferrer">
                   Open PDF
+                </a>
+              )}
+              {online && (
+                <a className="ml-1 text-accent hover:underline" href={online.url} target="_blank" rel="noreferrer" title="We have no downloaded copy of this document, so this opens the official web page.">
+                  Open source online
                 </a>
               )}
             </p>

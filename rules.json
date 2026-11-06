@@ -146,7 +146,7 @@
       "plain_meaning": "Escape stairs must be at least 900 mm wide (FSS Code). Stairs serving more than 90 people must run fore and aft with no curves. A flight may rise at most 3.5 m before a landing, at no more than 45 degrees. 800 mm is only accepted where a single means of escape has been allowed by dispensation (Reg 13 3.2.1.2).",
       "inputs_needed": ["stairs", "people_per_room"],
       "early_warning": "Runs as soon as a stair is placed. Shows the width against 900 mm and the persons the stair serves.",
-      "test": "Check width, direction, height of each flight, and handrails on both sides.",
+      "test": "Check width, direction, height of each flight, and handrails on both sides. Also check that the flights fit in the stairwell box (length at the steepest allowed slope, clear width across) and that the stair has a door on its top and bottom deck.",
       "values": {
         "min_width_mm_reg13": 800,
         "min_width_mm_uscg_fss": 900,
@@ -154,9 +154,12 @@
         "persons_needing_fore_aft_alignment": 90,
         "max_rise_without_landing_m": 3.5,
         "max_inclination_deg": 45,
-        "handrails_both_sides": true
+        "handrails_both_sides": true,
+        "stair_must_fit_in_stairwell": true,
+        "stair_needs_door_at_top_and_bottom": true,
+        "fit_note": "Model checks, not separate numbers: run needed = rise per flight / tan(max_inclination_deg); with 2 or more flights per deck the flights fold back side by side, so the stairwell must be 2 x clear width across."
       },
-      "fail_if": "width < 900 -> red; more than 90 persons and not aligned fore and aft -> red; rise > 3.5 m -> red",
+      "fail_if": "width < 900 -> red; more than 90 persons and not aligned fore and aft -> red; rise > 3.5 m -> red; flights do not fit in the stairwell -> red; no door on the top or bottom deck -> amber",
       "ask_meyer": "Q3"
     },
 
