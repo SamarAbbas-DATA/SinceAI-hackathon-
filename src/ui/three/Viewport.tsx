@@ -3,14 +3,14 @@ import { Canvas, useThree, useFrame, type ThreeEvent } from "@react-three/fiber"
 import { OrbitControls, Edges, Html, Line, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import * as THREE from "three";
 import { useStore, newId, live } from "../store";
-import { createShip, spaceVertical, spaceDeckIds, sortedDecks, deckHeight, halfBreadthAt, motions, G } from "../../engine/vessel";
+import { createShip, spaceVertical, spaceDeckIds, sortedDecks, deckHeight, halfBreadthAt, motions, G, centreOutsideHull } from "../../engine/vessel";
 import { rectOf, spacesOnDeck, sharedEdges, OUTSIDE, overlapsWith } from "../../engine/topology";
-import { cabinBlock, stairCore } from "../../engine/generators";
+import { cabinBlock, stairCore, doorSpot, type DoorSpot } from "../../engine/generators";
 import { gzAt } from "../../engine/stability";
 import type { Design, Space, LSA } from "../../engine/types";
 import { pairKey } from "../../engine/types";
 import { hullGeometry, deckGeometry, sectionGeometry } from "./geometry";
-import { TYPE_COLOR, STATUS_COLOR, DEFAULT_SIZE, DEFAULT_PERSONS, TYPE_LABEL, LSA_COLOR } from "../theme";
+import { TYPE_COLOR, STATUS_COLOR, DEFAULT_SIZE, DEFAULT_PERSONS, TYPE_LABEL, LSA_COLOR, EXIT_COLOR } from "../theme";
 
 const SNAP = 0.25;
 const snap = (v: number, s = SNAP) => Math.round(v / s) * s;
@@ -651,7 +651,7 @@ function SpaceBox({ s, onActive, hovered, setHover }: { s: Space; onActive: bool
           <meshStandardMaterial color={s.tank!.content === "fuel" ? "#6b4a2b" : s.tank!.content === "ballast" ? "#4f5f63" : "#7c8f96"} transparent opacity={0.9} roughness={0.9} />
         </mesh>
       )}
-      {((hovered && onActive) || selected || (showLabels && onActive && !testing)) && (
+      {((hovered && onActive && tool.kind !== "door") || selected || (showLabels && onActive && !testing)) && (
         <Html position={[0, 0, h / 2 + 0.5]} center style={{ pointerEvents: "none" }} zIndexRange={[20, 0]}>
           <div className="anim-wipe rounded border border-line bg-surface/95 px-2 py-[3px] text-[11px] whitespace-nowrap text-fg shadow-[0_6px_18px_-8px_rgba(0,0,0,0.5)]">
             {s.name}
@@ -666,10 +666,51 @@ function SpaceBox({ s, onActive, hovered, setHover }: { s: Space; onActive: bool
   );
 }
 
+/** Exit-sign icon (rounded square, white door with an arrow) as a texture, cached per colour. */
+const exitTextures = new Map<string, THREE.CanvasTexture>();
+function exitIcon(color: string): THREE.CanvasTexture {
+  const hit = exitTextures.get(color);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  g.fillStyle = color;
+  g.beginPath();
+  g.roundRect(4, 4, 56, 56, 13);
+  g.fill();
+  g.strokeStyle = "#ffffff";
+  g.lineWidth = 5;
+  g.lineJoin = "round";
+  g.lineCap = "round";
+  g.strokeRect(14, 15, 18, 34); // door
+  g.beginPath(); // arrow out of the door
+  g.moveTo(28, 32);
+  g.lineTo(51, 32);
+  g.moveTo(43, 24);
+  g.lineTo(51, 32);
+  g.lineTo(43, 40);
+  g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  exitTextures.set(color, t);
+  return t;
+}
+
+/** Screen-size exit icon: stays the same size at any zoom and shows through rooms. */
+function ExitIcon({ color, z, size = 0.02, pick }: { color: string; z: number; size?: number; pick?: object }) {
+  return (
+    <sprite position={[0, 0, z]} scale={[size, size, 1]} renderOrder={14} {...pick}>
+      <spriteMaterial map={exitIcon(color)} sizeAttenuation={false} depthTest={false} depthWrite={false} transparent />
+    </sprite>
+  );
+}
+
 function Doors({ visibleDeckIds }: { visibleDeckIds: Set<string> }) {
   const design = useStore((s) => s.design);
   const analysis = useStore((s) => s.analysis);
   const selection = useStore((s) => s.selection);
+  const activeDeckId = useStore((s) => s.activeDeckId);
+  const testing = useStore((s) => s.mode === "test");
   const deckZ = new Map(design.decks.map((d) => [d.id, d.z]));
   const conns = analysis?.graph.conns ?? [];
   return (
@@ -682,26 +723,31 @@ function Doors({ visibleDeckIds }: { visibleDeckIds: Set<string> }) {
           const r = rectOf(s);
           return spaceDeckIds(design, s).includes(d.deckId) && (Math.abs(d.x - r.x0) < 0.25 || Math.abs(d.x - r.x1) < 0.25) && d.y > r.y0 - 0.25 && d.y < r.y1 + 0.25;
         });
-        const w = d.widthMm / 1000;
+        // Emergency door: drawn a little wider than its clear width so it is easy to see and click,
+        // plus a screen-size exit icon on the active deck (and on flagged doors) that shows through the rooms.
+        const w = Math.max(1.0, d.widthMm / 1000 + 0.2);
         const sel = selection?.kind === "door" && selection.id === d.id;
         const st = analysis?.statusById.get(d.id);
+        const color = sel ? "#ffffff" : bad ? STATUS_COLOR.amber : st && st !== "green" ? STATUS_COLOR[st] : EXIT_COLOR;
+        const z0 = deckZ.get(d.deckId) ?? 0;
+        const pick = {
+          onClick: (e: ThreeEvent<MouseEvent>) => {
+            if (useStore.getState().tool.kind === "select") e.stopPropagation();
+          },
+          onPointerDown: (e: ThreeEvent<PointerEvent>) => {
+            if (useStore.getState().tool.kind !== "select" || useStore.getState().mode !== "design") return;
+            e.stopPropagation();
+            useStore.getState().select({ kind: "door", id: d.id });
+          },
+        };
         return (
-          <mesh
-            key={d.id}
-            position={[d.x, d.y, (deckZ.get(d.deckId) ?? 0) + 1.05]}
-            renderOrder={6}
-            onClick={(e) => {
-              if (useStore.getState().tool.kind === "select") e.stopPropagation();
-            }}
-            onPointerDown={(e) => {
-              if (useStore.getState().tool.kind !== "select" || useStore.getState().mode !== "design") return;
-              e.stopPropagation();
-              useStore.getState().select({ kind: "door", id: d.id });
-            }}
-          >
-            <boxGeometry args={alongY ? [0.35, w, 2.0] : [w, 0.35, 2.0]} />
-            <meshStandardMaterial color={sel ? "#ffffff" : bad ? STATUS_COLOR.amber : st && st !== "green" ? STATUS_COLOR[st] : "#9c8a74"} roughness={0.9} />
-          </mesh>
+          <group key={d.id} position={[d.x, d.y, z0]}>
+            <mesh position={[0, 0, 1.05]} renderOrder={6} {...pick}>
+              <boxGeometry args={alongY ? [0.6, w, 2.1] : [w, 0.6, 2.1]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} roughness={0.7} />
+            </mesh>
+            {!testing && (d.deckId === activeDeckId || sel || bad || (st && st !== "green")) && <ExitIcon color={color} z={2.6} pick={pick} />}
+          </group>
         );
       })}
     </>
@@ -922,25 +968,6 @@ function magnet(design: Design, s: Space, x: number, y: number) {
   return { x: x + bestX.dx, y: y + bestY.dy };
 }
 
-/** Nearest point on any space boundary of the deck (for door placement). */
-function nearestWallPoint(design: Design, deckId: string, x: number, y: number) {
-  let best: { x: number; y: number; d: number } | null = null;
-  for (const s of spacesOnDeck(design, deckId)) {
-    const r = rectOf(s);
-    const cands = [
-      { x: r.x0, y: Math.min(Math.max(y, r.y0), r.y1) },
-      { x: r.x1, y: Math.min(Math.max(y, r.y0), r.y1) },
-      { x: Math.min(Math.max(x, r.x0), r.x1), y: r.y0 },
-      { x: Math.min(Math.max(x, r.x0), r.x1), y: r.y1 },
-    ];
-    for (const c of cands) {
-      const d = Math.hypot(c.x - x, c.y - y);
-      if (!best || d < best.d) best = { ...c, d };
-    }
-  }
-  return best && best.d < 2 ? { x: snap(best.x, 0.05), y: snap(best.y, 0.05) } : null;
-}
-
 type Ghost = { boxes: { x: number; y: number; l: number; b: number; color: string }[]; ok: boolean } | null;
 
 function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
@@ -951,7 +978,7 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
   const deck = design.decks.find((d) => d.id === activeDeckId);
   const { controls, camera, gl } = useThree();
   const [ghost, setGhost] = useState<Ghost>(null);
-  const [doorGhost, setDoorGhost] = useState<{ x: number; y: number } | null>(null);
+  const [doorGhost, setDoorGhost] = useState<DoorSpot | null>(null);
   const [bhGhost, setBhGhost] = useState<number | null>(null);
   const moveRef = useRef<(p: { x: number; y: number }, shift: boolean) => void>(() => {});
   const clearRef = useRef(() => {});
@@ -993,9 +1020,13 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
       const st = useStore.getState();
       const s = st.design.spaces.find((x) => x.id === drag!.id);
       const hit = s ? overlapsWith(st.design, s) : [];
+      const ship = st.analysis?.ship;
       if (hit.length) {
         st.cancelGesture();
         st.notify(`${s!.name} cannot go there: it would overlap ${hit[0].name}. Moved back.`, "error");
+      } else if (s && ship && centreOutsideHull(st.design, ship, s)) {
+        st.cancelGesture();
+        st.notify(`${s.name} cannot go there: it would be outside the hull, in the water. Moved back.`, "error");
       } else st.commit();
       drag = null;
       const c = controls as unknown as { enabled: boolean } | null;
@@ -1028,7 +1059,7 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
     if (tool.kind === "space") {
       const [l, b] = DEFAULT_SIZE[tool.type];
       const probe: Space = { id: "__ghost", name: "ghost", type: tool.type, deckId: deck.id, xCentre: x, yCentre: y, length: l, breadth: b, persons: 0 };
-      return { boxes: [{ x, y, l, b, color: TYPE_COLOR[tool.type] }], ok: overlapsWith(design, probe).length === 0 };
+      return { boxes: [{ x, y, l, b, color: TYPE_COLOR[tool.type] }], ok: overlapsWith(design, probe).length === 0 && !centreOutsideHull(design, ship, probe) };
     }
     if (tool.kind === "stamp") {
       const r = tool.stamp === "cabin_block" ? cabinBlock(design, deck.id, x, y, stampOpts) : stairCore(design, deck.id, x, y, stampOpts.stairWidthMm);
@@ -1038,7 +1069,7 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
           : tool.stamp === "cabin_block"
             ? [{ xCentre: x + (stampOpts.cabins * stampOpts.cabinLength) / 2, yCentre: y, length: stampOpts.cabins * stampOpts.cabinLength, breadth: stampOpts.corridorWidth + 2 * stampOpts.cabinDepth, type: "cabin" as const }]
             : [{ xCentre: x, yCentre: y, length: 4, breadth: 4, type: "stairwell" as const }];
-      return { boxes: spaces.map((s) => ({ x: s.xCentre, y: s.yCentre, l: s.length, b: s.breadth, color: TYPE_COLOR[s.type] })), ok: r.ok };
+      return { boxes: spaces.map((s) => ({ x: s.xCentre, y: s.yCentre, l: s.length, b: s.breadth, color: TYPE_COLOR[s.type] })), ok: r.ok && !spaces.some((s) => centreOutsideHull(design, ship, { deckId: deck.id, xCentre: s.xCentre, yCentre: s.yCentre })) };
     }
     return null;
   };
@@ -1066,7 +1097,7 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
     const x = snap(p.x),
       y = snap(p.y);
     if (tool.kind === "space" || tool.kind === "stamp") setGhost(preview(x, y));
-    else if (tool.kind === "door") setDoorGhost(nearestWallPoint(design, deck.id, p.x, p.y));
+    else if (tool.kind === "door") setDoorGhost(doorSpot(design, deck.id, p.x, p.y));
     else if (tool.kind === "bulkhead") setBhGhost(snap(p.x, 0.5));
     else if (tool.kind === "lsa") {
       const q = lsaPos(p.x, p.y);
@@ -1108,6 +1139,10 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
         st.notify(`Cannot place a ${TYPE_LABEL[tool.type].toLowerCase()} here: it would overlap ${hit[0].name}. Spaces may touch but not overlap.`, "error");
         return;
       }
+      if (centreOutsideHull(st.design, ship, sp)) {
+        st.notify(`Cannot place a ${TYPE_LABEL[tool.type].toLowerCase()} here: it would be outside the hull, in the water. Click inside the deck outline.`, "error");
+        return;
+      }
       st.edit((d) => void d.spaces.push(sp));
       st.select({ kind: "space", id });
       st.set({ panel: "inspect" });
@@ -1118,6 +1153,11 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
         st.notify(`Cannot stamp here: ${r.error}`, "error");
         return;
       }
+      const wet = r.spaces.find((s) => centreOutsideHull(st.design, ship, s));
+      if (wet) {
+        st.notify(`Cannot stamp here: ${wet.name} would be outside the hull, in the water. Move the stamp inside the deck outline.`, "error");
+        return;
+      }
       st.edit((d) => {
         d.spaces.push(...r.spaces);
         d.doors.push(...r.doors);
@@ -1125,12 +1165,23 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
       st.notify(`Added ${r.spaces.length} spaces and ${r.doors.length} doors.`, "ok");
     } else if (tool.kind === "door") {
       e.stopPropagation();
-      const w = nearestWallPoint(st.design, deck.id, p.x, p.y);
+      const w = doorSpot(st.design, deck.id, p.x, p.y);
       if (!w) {
-        st.notify("Click closer to a wall: doors are placed on the nearest wall within 2 m.", "error");
+        st.notify("Click closer to a wall: emergency doors snap to the nearest wall between two rooms within 3 m.", "error");
         return;
       }
-      st.edit((d) => void d.doors.push({ id: newId("d"), deckId: deck.id, x: w.x, y: w.y, widthMm: 800 }));
+      const dup = st.design.doors.find((q) => q.deckId === deck.id && Math.hypot(q.x - w.x, q.y - w.y) < 0.6);
+      if (dup) {
+        st.select({ kind: "door", id: dup.id });
+        st.set({ panel: "inspect" });
+        st.notify("There is already an emergency door here; it is now selected.", "info");
+        return;
+      }
+      const id = newId("d");
+      st.edit((d) => void d.doors.push({ id, deckId: deck.id, x: w.x, y: w.y, widthMm: w.widthMm }));
+      const name = (sid?: string) => st.design.spaces.find((q) => q.id === sid)?.name ?? "";
+      if (w.b) st.notify(`Emergency door ${w.widthMm} mm added between ${name(w.a)} and ${name(w.b)}.`, "ok");
+      else st.notify(`Emergency door added on an outer wall of ${name(w.a)}: it only counts once there is a space on the other side.`, "info");
     } else if (tool.kind === "bulkhead") {
       e.stopPropagation();
       const id = newId(tool.bk === "watertight" ? "wt" : "mvz");
@@ -1159,10 +1210,13 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
         </mesh>
       ))}
       {doorGhost && (
-        <mesh position={[doorGhost.x, doorGhost.y, deck.z + 1.05]}>
-          <boxGeometry args={[0.6, 0.6, 2.1]} />
-          <meshBasicMaterial color="#e0803c" transparent opacity={0.8} />
-        </mesh>
+        <group position={[doorGhost.x, doorGhost.y, deck.z]}>
+          <mesh position={[0, 0, 1.05]} renderOrder={13}>
+            <boxGeometry args={doorGhost.alongY ? [0.7, Math.max(1.0, doorGhost.widthMm / 1000 + 0.2), 2.1] : [Math.max(1.0, doorGhost.widthMm / 1000 + 0.2), 0.7, 2.1]} />
+            <meshBasicMaterial color={doorGhost.b ? EXIT_COLOR : STATUS_COLOR.amber} transparent opacity={0.75} depthTest={false} depthWrite={false} />
+          </mesh>
+          <ExitIcon color={doorGhost.b ? EXIT_COLOR : STATUS_COLOR.amber} z={2.6} size={0.032} />
+        </group>
       )}
       {bhGhost !== null && (
         <mesh position={[bhGhost, 0, design.hull.depth / 2]}>

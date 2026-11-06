@@ -367,6 +367,26 @@ export interface Condition {
   overloaded: boolean; // displacement exceeds the hull volume up to depth
 }
 
+/**
+ * The same loading condition after extra weight dW (t) is added at the lightship centre of gravity
+ * (weight growth during design and service). Draft is solved again on the hull; trim is kept as it was.
+ */
+export function grownCondition(ship: Ship, cond: Condition, dW: number): { T: number; sinkage: number; freeboard: number; KG: number; GMt: number; overloaded: boolean } {
+  const M = cond.weights.total.massT;
+  const M2 = M + dW;
+  const hull = ship.structure.hull;
+  const depthT = cond.freeboard + Math.max(cond.draftAft, cond.draftFwd); // moulded depth (freeboard = depth - deepest draft)
+  const Vdepth = hull.calculateAttributesAtDraft(depthT).Vs;
+  const overloaded = (M2 * 1000) / RHO > Vdepth;
+  const T = overloaded ? depthT : hull.calculateDraftAtMass(M2 * 1000, 0.0005, RHO);
+  const h = hydroAt(ship, T);
+  const KGsolid = (M * cond.KGsolid + dW * cond.weights.lightship.kg) / M2;
+  const FSC = (cond.FSC * M) / M2; // same free-surface moments, heavier ship
+  const KG = KGsolid + FSC;
+  const sinkage = T - cond.T;
+  return { T, sinkage, freeboard: cond.freeboard - sinkage, KG, GMt: h.KB + h.BMt - KG, overloaded };
+}
+
 /** Free-surface moment (t.m) of every slack tank: rho_liquid * l * b^3 / 12. Full (>= 98 %) or empty tanks have none. */
 export function freeSurfaceMoments(design: Design): { spaceId: string; fsm: number }[] {
   const out: { spaceId: string; fsm: number }[] = [];
@@ -557,6 +577,21 @@ export function halfBreadthAt(ship: Ship, x: number, z: number): number {
   const sts = hull.halfBreadths.stations.map((s) => s * hull.attributes.LOA);
   if (x < sts[0] || x > sts[sts.length - 1]) return 0;
   return f.linearFromArrays(sts, wl as number[], x);
+}
+
+/**
+ * True when the centre of a space lies outside the hull outline at its deck, i.e. the space would sit in
+ * the water. Decks above the hull (no outline at that height) are never blocked. Partly sticking out is
+ * left to the "sticks out of the hull" model check.
+ */
+export function centreOutsideHull(design: Design, ship: Ship, s: Pick<Space, "deckId" | "xCentre" | "yCentre">): boolean {
+  const deck = design.decks.find((d) => d.id === s.deckId);
+  if (!deck) return false;
+  const z = deck.z + 0.01;
+  const LOA = design.hull.LOA;
+  if (halfBreadthAt(ship, LOA / 2, z) <= 0.05) return false;
+  if (s.xCentre < 0 || s.xCentre > LOA) return true;
+  return Math.abs(s.yCentre) > halfBreadthAt(ship, s.xCentre, z);
 }
 
 /** Deck outline polygon (x, y) at height z, port and starboard. */

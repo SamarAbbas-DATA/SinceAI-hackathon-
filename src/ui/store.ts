@@ -4,6 +4,7 @@ import { normalizeDesign } from "../engine/types";
 import { analyze, type Analysis } from "../engine/analyze";
 import { demoDesign } from "../data/demoDesign";
 import { overlapsWith } from "../engine/topology";
+import { centreOutsideHull } from "../engine/vessel";
 
 export type StampKind = "cabin_block" | "stair_core";
 export type Tool =
@@ -42,16 +43,39 @@ export interface TestSettings {
 }
 
 const STORAGE_KEY = "ship-precheck-design-v1";
+const PREVIOUS_KEY = "ship-precheck-previous-session";
 const THEME_KEY = "ship-precheck-theme";
 
+/**
+ * The app always starts from the default demo ferry, so a reload never shows an old, half-edited design.
+ * The design of the last session is kept under PREVIOUS_KEY and can be restored from File > Restore last session.
+ */
 function loadInitial(): Design {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return normalizeDesign(JSON.parse(raw));
+    if (raw) localStorage.setItem(PREVIOUS_KEY, raw);
   } catch {
     /* storage unavailable */
   }
   return demoDesign();
+}
+
+export function hasPreviousSession(): boolean {
+  try {
+    return localStorage.getItem(PREVIOUS_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** The design from the previous browser session, or null. */
+export function previousSession(): Design | null {
+  try {
+    const raw = localStorage.getItem(PREVIOUS_KEY);
+    return raw ? normalizeDesign(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
 }
 
 interface State {
@@ -171,6 +195,11 @@ export const useStore = create<State>((set, get) => {
       const hit = overlapsWith(probe, s);
       if (hit.length) {
         get().notify(`Not applied: ${s.name} would overlap ${hit[0].name}. Spaces may touch but not overlap.`, "error");
+        return false;
+      }
+      const ship = get().analysis?.ship;
+      if (ship && centreOutsideHull(probe, ship, s)) {
+        get().notify(`Not applied: the centre of ${s.name} would be outside the hull, in the water. Move it towards the centreline.`, "error");
         return false;
       }
       get().edit((d) => fn(d.spaces.find((x) => x.id === id)!));

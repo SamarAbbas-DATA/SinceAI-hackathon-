@@ -10,6 +10,7 @@ ALWAYS (every session, every reset)
 
 TASK: change or add a rule, threshold or flag text
   - rules.json                 single source of truth for thresholds and sources
+  - docs/ (regulations) and docs/Sources/ (reference ships: NOAA SWATH report, three general arrangements)
   - src/engine/rules.ts        one function per rule id; every finding needs message, detail, fix
   - THINGS_TO_ASK.txt          add a question if a value is not from a downloaded document
   - tests/rules.test.ts, tests/features.test.ts

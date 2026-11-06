@@ -65,6 +65,9 @@ export const DEFAULT_SIZE: Record<SpaceType, [number, number]> = {
 
 export const DEFAULT_PERSONS: Partial<Record<SpaceType, number>> = { cabin: 2, public: 20, galley: 4, engine_room: 2 };
 
+/** Emergency doors: exit-sign green, so they stand out from rooms and walls. */
+export const EXIT_COLOR = "#3fb37f";
+
 /** Crisp status colours (CSS variables in the UI, hex for three.js and the PDF). */
 export const STATUS_COLOR: Record<Status, string> = {
   red: "#e5484d",

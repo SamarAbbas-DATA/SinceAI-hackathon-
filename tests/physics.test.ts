@@ -2,7 +2,7 @@
 // If vessel.js hydrostatics, our GZ integration or the flooding method were wrong, these would fail.
 import { describe, it, expect } from "vitest";
 import { blankDesign } from "../src/data/demoDesign";
-import { createShip, hydroAt, RHO, computeCondition } from "../src/engine/vessel";
+import { createShip, hydroAt, RHO, computeCondition, grownCondition } from "../src/engine/vessel";
 import { gzCurve, gzAt } from "../src/engine/stability";
 import { floodAnalysis, lostVolume, requiredR } from "../src/engine/flooding";
 import type { Design } from "../src/engine/types";
@@ -147,5 +147,25 @@ describe("loading condition", () => {
     expect(c.T).toBeCloseTo(4, 3);
     expect(c.GMt).toBeCloseTo(2 + (B * B) / (12 * 4) - 5, 3);
     expect(Math.abs(c.trimByStern)).toBeLessThan(1e-3);
+  });
+
+  it("weight margin: a box sinks dW / (rho L B) and KG moves to the weighted mean", () => {
+    // Box at T = 4 m, KG 5 m (lightship KG 6 m). Add dW = 410 t at the lightship KG.
+    const d = boxDesign();
+    d.loading.lightshipOverride = { massT: (RHO * L * B * 4) / 1000 - 500, lcg: 50, kg: 6 };
+    d.loading.deadweight = { massT: 500, lcg: 50, kg: 1 };
+    const ship = createShip(d);
+    const c = computeCondition(d, ship);
+    const M = c.weights.total.massT;
+    const dW = 410;
+    const g = grownCondition(ship, c, dW);
+    const T2 = 4 + (dW * 1000) / (RHO * L * B); // 4.2 m
+    expect(g.T).toBeCloseTo(T2, 3);
+    expect(g.sinkage).toBeCloseTo(T2 - 4, 3);
+    expect(g.freeboard).toBeCloseTo(D - T2, 3);
+    const KG2 = (M * c.KG + dW * 6) / (M + dW);
+    expect(g.KG).toBeCloseTo(KG2, 6);
+    expect(g.GMt).toBeCloseTo(T2 / 2 + (B * B) / (12 * T2) - KG2, 3);
+    expect(grownCondition(ship, c, 0).GMt).toBeCloseTo(c.GMt, 6);
   });
 });

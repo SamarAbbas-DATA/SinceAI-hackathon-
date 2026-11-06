@@ -55,6 +55,26 @@
       "id": "IS-CODE-2008",
       "name": "IMO International Code on Intact Stability 2008, Part A 2.2 (not downloaded; values to be confirmed)",
       "url": "https://www.imo.org/en/OurWork/Safety/Pages/Stability.aspx"
+    },
+    {
+      "id": "NOAA-SWATH-1990",
+      "name": "NOAA / BSM Joint Venture, Conceptual design of a SWATH oceanographic research ship, BSM Report 9001-3 (1990)",
+      "file": "docs/Sources/noaa_30507_DS1.pdf"
+    },
+    {
+      "id": "GA-GOSARS",
+      "name": "General arrangement of the research vessel G.O. Sars, Skipsteknisk drawing 04650 rev H (reference ship)",
+      "file": "docs/Sources/04650 Rev.H General Arrangement GO SARS.pdf"
+    },
+    {
+      "id": "GA-23007",
+      "name": "General arrangement 23007-01-101-0110 rev R2-14, research vessel (reference ship)",
+      "file": "docs/Sources/23007-01-101-0110-01-R2-14-General-arrangement.pdf"
+    },
+    {
+      "id": "GA-9281",
+      "name": "General arrangement GA2017117-01, 60 m fishery research vessel for Arctic operation (reference ship)",
+      "file": "docs/Sources/9281-ga-plan-2017117-01-model-anynomized.pdf"
     }
   ],
 
@@ -157,9 +177,11 @@
         "handrails_both_sides": true,
         "stair_must_fit_in_stairwell": true,
         "stair_needs_door_at_top_and_bottom": true,
-        "fit_note": "Model checks, not separate numbers: run needed = rise per flight / tan(max_inclination_deg); with 2 or more flights per deck the flights fold back side by side, so the stairwell must be 2 x clear width across."
+        "fit_note": "Model checks, not separate numbers: run needed = rise per flight / tan(max_inclination_deg); with 2 or more flights per deck the flights fold back side by side, so the stairwell must be 2 x clear width across.",
+        "door_to_stair_at_least_stair_width": true,
+        "door_to_stair_clause": "Regulation 13 guidance G5.1 (UK MCA copy in docs/): doorways serving stairways should not be less than the width of the stairway"
       },
-      "fail_if": "width < 900 -> red; more than 90 persons and not aligned fore and aft -> red; rise > 3.5 m -> red; flights do not fit in the stairwell -> red; no door on the top or bottom deck -> amber",
+      "fail_if": "width < 900 -> red; more than 90 persons and not aligned fore and aft -> red; rise > 3.5 m -> red; flights do not fit in the stairwell -> red; no door on the top or bottom deck -> amber; emergency door into the stair narrower than the stair -> amber",
       "ask_meyer": "Q3"
     },
 
@@ -269,6 +291,50 @@
       "fail_if": "lifeboat capacity on either side < 50 % of persons, or liferaft capacity < 25 % of persons",
       "assumption_note": "Shares quoted from SOLAS III/21.1.1, which is not in docs/. Short international voyage alternatives are not modelled.",
       "ask_meyer": "Q7"
+    },
+
+    {
+      "id": "WEIGHT-MARGIN",
+      "title": "Ship still floats well if it gets heavier",
+      "status": "from_source",
+      "source": "NOAA-SWATH-1990",
+      "clause": "Section 4.6, Table 8 (design and build margin 160 LT on a 2,350 LT lightship) and section 3.2, Table 1 (service life margin 113 LT on a 2,510 LT lightship), NAVSEA practice",
+      "plain_meaning": "Ships get heavier while they are designed, built and used. Designers keep a weight margin: here about 6.8 % of lightship for design and build, plus 4.5 % for growth in service. The ship should still have freeboard and stability with that extra weight.",
+      "inputs_needed": ["hull", "decks", "rooms", "weights"],
+      "early_warning": "Runs as soon as the ship floats. Every change in rooms or loading moves the result.",
+      "test": "Add the margin weight at the lightship centre of gravity, solve the draft again on the hull, and compare the new freeboard and GM with the limits.",
+      "values": {
+        "design_build_margin_share_of_lightship": 0.068,
+        "service_life_margin_share_of_lightship": 0.045,
+        "min_freeboard_after_margin_m": 0.5,
+        "min_gm_after_margin_from_rule": "INTACT-STABILITY.min_initial_gm_m"
+      },
+      "fail_if": "after the margin weight: deck edge under water or GM below the intact minimum -> red; freeboard below 0.5 m -> amber",
+      "assumption_note": "Margin shares are from the NOAA report (a 1990 US research ship design following NAVSEA). Meyer Turku may use other margins. The 0.5 m freeboard is the same low-freeboard warning the model check uses. Trim is kept unchanged.",
+      "ask_meyer": "Q10"
+    },
+
+    {
+      "id": "REFERENCE-SHIPS",
+      "title": "Sizes compared with real ships",
+      "status": "assumed",
+      "source": "GA-23007, GA-GOSARS, GA-9281 and NOAA-SWATH-1990",
+      "clause": "Smallest values read from three general arrangement drawings in docs/Sources; NOAA report 2.4.2 for rooms used as passageways",
+      "plain_meaning": "Compares the design with three real research ships: cabins should not be smaller per person than on those ships, decks should not be closer together, and escape routes should not lead through private rooms, work rooms or machinery spaces.",
+      "inputs_needed": ["rooms", "people_per_room", "decks", "doors"],
+      "early_warning": "Runs on every change. Only gives amber hints; these are good practice, not regulations.",
+      "test": "Floor area per person of every cabin, height between neighbouring decks, and every escape route checked for rooms it passes through.",
+      "values": {
+        "min_cabin_area_per_person_m2": 7.5,
+        "cabin_area_note": "GA 23007: 2-person cabins 15 m2 (7.5 m2 per person), 1-person cabins 12 m2",
+        "min_deck_height_m": 2.5,
+        "deck_height_note": "G.O. Sars: decks at 6.30, 9.10, 11.80, 14.30 m (smallest 2.5 m); GA 23007: 2.7 to 2.8 m; GA2017117: 11.40 to 14.00 m (2.6 m)",
+        "rooms_not_passageways": ["cabin", "galley", "store", "engine_room", "other", "tank", "void"],
+        "passageway_note": "NOAA report 2.4.2: rooms should be located so that none serve as general passageways"
+      },
+      "fail_if": "cabin area per person below 7.5 m2, deck height below 2.5 m, or an escape route passing through a room -> amber",
+      "assumption_note": "Reference values from research ships, not passenger ship rules. Ferry and cruise cabins can be smaller. Use them as a sanity check only.",
+      "ask_meyer": "Q11"
     }
   ],
 
@@ -279,6 +345,8 @@
     "Q4": "Which evacuation time limit and walking speeds do you use? Can we use a simplified total time for the demo?",
     "Q5": "Which flooding survival limits do you want in a simplified check (heel angle, damage cases)? Is it fine to label our result a rough estimate?",
     "Q6": "Should the intact stability check follow IS Code 2008 general criteria only, or also the weather criterion and your internal margins?",
-    "Q7": "Which survival craft arrangement do you design to (SOLAS III/21.1.1 lifeboats 50 % per side plus 25 % liferafts, or a short international voyage / marine evacuation system arrangement)?"
+    "Q7": "Which survival craft arrangement do you design to (SOLAS III/21.1.1 lifeboats 50 % per side plus 25 % liferafts, or a short international voyage / marine evacuation system arrangement)?",
+    "Q10": "Which weight margins do you use in early design (design and build, service life)? We use 6.8 % and 4.5 % of lightship from the NOAA report.",
+    "Q11": "What are your smallest cabin areas per person and deck heights for ferries and cruise ships? We compare with three research vessels (7.5 m2 per person, 2.5 m between decks)."
   }
 }

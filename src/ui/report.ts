@@ -269,7 +269,7 @@ export async function downloadReport() {
   // ---------------------------------------------------------------- sources
   heading("Sources and method");
   text("No AI or language model is used. All results come from deterministic geometry, graph and naval architecture calculations (vessel.js, MIT licence) compared with the thresholds in rules.json.", 8.5);
-  for (const s of RULES.sources as { id: string; name: string; url: string }[]) text(`${s.name}  ${s.url}`, 7.5, { c: [80, 90, 110], gap: 0.6 });
+  for (const s of RULES.sources as { id: string; name: string; url?: string; file?: string }[]) text(`${s.name}  ${s.url ?? s.file ?? ""}`, 7.5, { c: [80, 90, 110], gap: 0.6 });
 
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {

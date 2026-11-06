@@ -1,10 +1,10 @@
 // Tanks / free surface, offsets CSV import, overlap guard, stamps, lifeboat capacity.
 import { describe, it, expect } from "vitest";
 import { blankDesign, demoDesign } from "../src/data/demoDesign";
-import { createShip, computeCondition, hydroAt, RHO } from "../src/engine/vessel";
+import { createShip, computeCondition, hydroAt, RHO, centreOutsideHull } from "../src/engine/vessel";
 import { parseOffsetsCSV, applyOffsets } from "../src/engine/io";
 import { overlapsWith, connections } from "../src/engine/topology";
-import { cabinBlock, autoDoors, stairCore } from "../src/engine/generators";
+import { cabinBlock, autoDoors, stairCore, doorSpot, emergencyDoorWidth } from "../src/engine/generators";
 import { analyze } from "../src/engine/analyze";
 import type { Design } from "../src/engine/types";
 
@@ -107,3 +107,47 @@ describe("lifeboats", () => {
 });
 
 void RHO;
+
+describe("emergency doors", () => {
+  it("a click near a shared wall snaps onto it and the door connects both spaces", () => {
+    const d = demoDesign();
+    // D3 corridor aft runs y -1..1 from x 16 to 40; cabin P24 is above it (y 1..5, x 24..28)
+    const spot = doorSpot(d, "D3", 26.2, 2.4)!;
+    expect(spot.b).toBeDefined();
+    expect(spot.y).toBeCloseTo(1, 6);
+    const ids = [spot.a, spot.b].sort();
+    expect(ids).toContain("D3-cabP24");
+    d.doors.push({ id: "new", deckId: "D3", x: spot.x, y: spot.y, widthMm: spot.widthMm });
+    const c = connections(d).conns.find((k) => k.id === "new")!;
+    expect([c.a, c.b].sort()).toEqual(ids);
+  });
+
+  it("a door into a stair gets the stair's clear width, other doors 800 mm, never wider than the wall", () => {
+    const d = demoDesign();
+    const stairA = d.spaces.find((s) => s.id === "stairA")!;
+    const corr = d.spaces.find((s) => s.id === "D3-corr1")!;
+    expect(emergencyDoorWidth(stairA, corr)).toBe(1200);
+    expect(emergencyDoorWidth(corr, null)).toBe(800);
+    expect(emergencyDoorWidth(stairA, corr, 1.0)).toBe(1000);
+    const r = stairCore(d, "D5", 104, 0, 1400);
+    expect(r.ok).toBe(true);
+    expect(r.doors.length).toBeGreaterThan(0);
+    expect(r.doors.every((x) => x.widthMm === 1400)).toBe(true);
+  });
+
+  it("nothing within reach gives no spot", () => {
+    expect(doorSpot(demoDesign(), "D3", 110, 0)).toBeNull();
+  });
+});
+
+describe("rooms in the water are refused", () => {
+  it("centre outside the hull outline is detected, inside is not", () => {
+    const d = demoDesign();
+    const ship = createShip(d);
+    expect(centreOutsideHull(d, ship, { deckId: "D5", xCentre: 32.5, yCentre: -47.75 })).toBe(true);
+    expect(centreOutsideHull(d, ship, { deckId: "D5", xCentre: 32.5, yCentre: 0 })).toBe(false);
+    expect(centreOutsideHull(d, ship, { deckId: "D3", xCentre: -5, yCentre: 0 })).toBe(true);
+    // every space of the demo ship is inside
+    expect(d.spaces.filter((s) => centreOutsideHull(d, ship, s)).map((s) => s.name)).toEqual([]);
+  });
+});

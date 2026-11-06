@@ -1,6 +1,6 @@
 # Progress
 
-## Status (2026-11-05)
+## Status (2026-11-07)
 Core engine, rules, early warnings, editor, test mode and PDF report all work and are tested.
 
 Done in session 2:
@@ -27,6 +27,16 @@ Done in session 4 (2026-11-06):
 - Dropdown lists use theme colours in both themes (were white with light text on Windows in dark mode).
 - Build bar and tool rail: soft rounded tile in the tool colour on hover/active, icon fades slightly.
 - Rules without a downloaded PDF (fire zone, fire walls, stability, lifeboats) now link to the online source page.
+
+Done in session 5 (2026-11-07):
+- New sources in docs/Sources reviewed: NOAA SWATH research ship design report (1990) and general arrangement drawings of G.O. Sars, GA 23007 and GA2017117 (60 m fishery research vessel). They are reference ships, not rules; only implementable parts were taken.
+- New rule WEIGHT-MARGIN (NOAA Tables 1 and 8): design and build margin 6.8 % plus service life margin 4.5 % of lightship added at the lightship KG; draft solved again (grownCondition in vessel.ts, analytic box test); freeboard and GM checked.
+- New rule REFERENCE-SHIPS (amber hints): cabin area per person (7.5 m2), deck-to-deck height (2.5 m), escape routes through rooms (NOAA 2.4.2).
+- ESCAPE-STAIR-WIDTH: emergency doors into a stair at least as wide as the stair (REG13 guidance G5.1, amber). Demo now shows this for Stairs A and B.
+- Emergency doors: renamed in the UI, drawn thicker with a screen-size exit icon on the active deck, door tool snaps to the nearest wall between two rooms (3 m), green/amber preview, refuses duplicates, width = stair width into stairs (emergencyDoorWidth), door inspector "Set to stair width".
+- App always starts from the default demo ferry; File > Restore last session brings back the previous browser session.
+- Rooms whose centre is outside the hull (in the water) are refused when placing, stamping, dragging, typing coordinates or duplicating (centreOutsideHull).
+- Tests: 63 unit/physics, 17 browser checks.
 
 ## To-do
 ### Docs and data

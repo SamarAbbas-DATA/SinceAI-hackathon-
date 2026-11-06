@@ -95,9 +95,10 @@ export function ScoreRing({ score, size = 52 }: { score: number; size?: number }
 function RuleCard({ r, i }: { r: RuleResult; i: number }) {
   const [open, setOpen] = useState(r.status === "red");
   const def = ruleDef(r.ruleId);
-  const doc = Object.entries(DOC_FILES).find(([k]) => r.source.includes(k));
+  const srcs = RULES.sources as { id: string; url?: string; file?: string }[];
+  const doc = Object.entries(DOC_FILES).find(([k]) => r.source.includes(k)) ?? srcs.filter((s) => s.file && r.source.includes(s.id)).map((s) => [s.id, s.file!] as [string, string])[0];
   // No local copy (paid IMO texts, or an EU web page): link to the online source instead.
-  const online = doc ? undefined : (RULES.sources as { id: string; url?: string }[]).find((s) => r.source.includes(s.id) && s.url);
+  const online = doc ? undefined : srcs.find((s) => r.source.includes(s.id) && s.url);
   return (
     <section className="anim-rise border-b border-line" style={{ animationDelay: `${80 + i * 45}ms` }}>
       <button className="group flex w-full items-start gap-3 px-4 py-3 text-left" onClick={() => setOpen(!open)}>
@@ -122,7 +123,7 @@ function RuleCard({ r, i }: { r: RuleResult; i: number }) {
             <p className="text-faint">
               {r.sourceName}, {r.clause}.
               {doc && (
-                <a className="ml-1 text-accent hover:underline" href={`/${doc[1]}`} target="_blank" rel="noreferrer">
+                <a className="ml-1 text-accent hover:underline" href={`/${encodeURI(doc[1])}`} target="_blank" rel="noreferrer">
                   Open PDF
                 </a>
               )}
