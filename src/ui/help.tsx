@@ -154,7 +154,7 @@ const METHOD: Record<string, string> = {
   "ESCAPE-STAIR-WIDTH": "Stair properties compared with limits; persons per stair from the evacuation assignment; flights must fit in the stairwell at 45 degrees; emergency doors into a stair at least as wide as the stair.",
   "EVACUATION-TIME": "MSC.1/Circ.1533 Annex 2 hydraulic model: densities, specific flows, queues at stairs, travel times.",
   "FLOOD-SURVIVAL": "Lost-buoyancy method with vessel.js waterplane integration for each single and adjacent-pair damage.",
-  "INTACT-STABILITY": "GZ curve by integrating heeled hull sections at constant displacement, free-surface correction included.",
+  "INTACT-STABILITY": "GZ curve by integrating heeled hull sections at constant displacement, free-surface correction included. Passenger ships: heel where GZ equals the crowding lever (75 kg passengers, 4 per m2, outboard first on the assembly decks) and the turning lever 0.2 v2/(g LWL)(KG - T/2), both against 10 degrees.",
   "LSA-CAPACITY": "Sum of lifeboat capacity per side and liferaft capacity compared with persons on board.",
   "WEIGHT-MARGIN": "Margin weight added at the lightship centre of gravity; draft solved again on the vessel.js hull; new freeboard and GM compared with the limits.",
   "REFERENCE-SHIPS": "Cabin floor area per person, deck-to-deck heights and the rooms each escape route passes through, compared with three real research ships.",
@@ -162,6 +162,8 @@ const METHOD: Record<string, string> = {
   "PIPE-WATERTIGHT": "Every horizontal pipe or cable segment below the bulkhead deck tested for crossing a watertight bulkhead; the forwardmost one is the collision bulkhead.",
   "PIPE-FUEL-HOT": "Closest distance between the fuel oil and exhaust centrelines in 3D, minus both radii; rooms a fuel line passes through by clipping its segments to the room outlines.",
   "CABLE-ROUTING": "Cable segments clipped to every room outline on their decks (risers count every deck they pass); clear gap to the exhaust uptakes as for fuel lines.",
+  "COLLISION-BULKHEAD": "Waterline at 85 % of the moulded depth from the vessel.js hull (forward end found by bisection); Lf = 96 % of its length; distance of the forwardmost watertight bulkhead from that forward perpendicular compared with min(0.05 Lf, 10 m) and max(0.08 Lf, 0.05 Lf + 3 m).",
+  "DESIGN-SANITY": "Persons per room and per m2, deck-to-deck heights of decks with rooms, bulkhead deck against the draft, bulkhead positions against the hull ends, each door against the wall it sits in, room and corridor sizes, ballast tanks against the waterline.",
 };
 
 export function SourcesPanel() {

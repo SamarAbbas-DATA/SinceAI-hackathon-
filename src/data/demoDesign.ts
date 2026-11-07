@@ -159,6 +159,8 @@ export function demoDesign(): Design {
     c.name = `${c.name} (family)`;
   }
 
+  // The forwardmost bulkhead (x 108) is the collision bulkhead: 12 m from the forward perpendicular, more than
+  // SOLAS II-1/12.1 allows for this length (COLLISION-BULKHEAD shows it in red; kept as a showcase).
   d.bulkheads = [
     ...[8, 20, 32, 46, 62, 76, 90, 108].map((x, i) => ({ id: `wt${i + 1}`, kind: "watertight" as const, x, rating: "A-0" as const })),
     { id: "mvz1", kind: "fire_zone", x: 40, rating: "A-60" },

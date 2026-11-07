@@ -69,6 +69,16 @@ Done in session 9 (2026-11-07, branch samar-version):
 - UI: Pipe (P) and Cable (C) tools on the tool rail with a type picker; click points under the deckhead (grid snap, straight along x or y, magnet to existing runs, Shift for any angle), change deck for a riser, Enter / second click / Esc finishes, Backspace undoes a point. Select a run to edit name, type and size, drag its bends (risers keep both ends together), extend from either end (or click an end handle). View toggles for pipes and cables (on by default); view toggles now in two columns to make room. Runs draw themselves in after the rooms assemble, lift and brighten on hover with a tooltip, show a crisp status line and map pins when flagged, are cut at the active deck like the rooms, and move with the ship in Test mode. Flags with a spot fly the camera there and select the run. PDF deck plans draw pipes, cables and risers.
 - Tests: 106 unit/physics (tests/systems.test.ts new: segment distances, clipping, deckhead heights, default runs, all four rules flipping), 32 browser checks.
 
+Done in session 10 (2026-11-07, branch samar-version): regulation audit
+- Checked every threshold in rules.json against the source formulas (SOLAS II-1/6 R, IS Code 2.2, Circ.1533 flows and n = 60/80, safety factor 1.25, FSS 900 mm / 3.5 m / 45 degrees, SOLAS III/21 50 % + 25 %, free-surface rho l b3/12, REG10 0.40 N/mm2): all correct. The existing calculations were left unchanged.
+- New COLLISION-BULKHEAD (SOLAS II-1/12.1 band from Lf on the 85 % depth waterline). It found a real problem: the demo ferry's collision bulkhead is 12.0 m aft of the forward perpendicular (allowed 5.8 to 9.2 m), now red and kept as a showcase. Model ships pass.
+- New DESIGN-SANITY: persons in tanks or voids (red) or in stairs and lifts (amber), 3.5 persons/m2 or more (Circ.1533 congestion), decks with rooms less than 2.03 m apart (MLC headroom), bulkhead deck under water, bulkheads outside the hull, doors wider than their wall (red) or under 600 mm, rooms under 1 m, corridors under 0.7 m, ballast above the waterline (amber). Green on the demo and all models.
+- INTACT-STABILITY now includes IS Code 3.1 passenger heel from crowding to one side and from turning (10 degree limit; heel measured from the GZ curve's own upright value, which removes a 1 cm integration residual); demo 0.1 / 0.8 degrees, Icon class about 0.8 / 0.7.
+- LSA-CAPACITY: survival craft less than 2 m above the waterline (SOLAS III/13.1.2) are red.
+- ESCAPE-STAIR-WIDTH: corridors leading to a stair narrower than the stair are amber (REG13 G5.1; doors were already checked).
+- Demo score 64 to 63 (one new red rule); model ships unchanged apart from the new green rules. THINGS_TO_ASK Q18 to Q20. Ideas for a small local AI in docs/LOCAL_AI_IDEAS.md (not implemented).
+- Tests: 117 unit/physics (tests/audit.test.ts new, analytic heel and lever checks), 32 browser checks.
+
 ## To-do
 ### Docs and data
 - [ ] Download the USCG stair PDF by hand (see THINGS_TO_ASK.txt)

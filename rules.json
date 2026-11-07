@@ -121,6 +121,18 @@
       "url": "https://iacs.s3.af-south-1.amazonaws.com/wp-content/uploads/2022/01/26154810/sdc-8-10-7-penetrations-in-watertight-divisions-pressure-testing-after-a-fire-test-solas-regulatio-iacs.pdf"
     },
     {
+      "id": "SOLAS-II-1-12",
+      "short": "SOLAS II-1/12",
+      "name": "SOLAS chapter II-1 regulation 12, peak and machinery space bulkheads: position of the collision bulkhead (not downloaded; values to be confirmed)",
+      "url": "https://www.imo.org/en/About/Conventions/Pages/International-Convention-for-the-Safety-of-Life-at-Sea-(SOLAS),-1974.aspx"
+    },
+    {
+      "id": "ILO-MLC-2006",
+      "short": "MLC 2006 A3.1",
+      "name": "ILO Maritime Labour Convention 2006, Standard A3.1 accommodation (headroom 203 cm; not downloaded)",
+      "url": "https://www.ilo.org/international-labour-standards/maritime-labour-convention-2006"
+    },
+    {
       "id": "GARD-COLLISION",
       "short": "Gard: collision bulkhead valve",
       "name": "Gard, Collision bulkhead - very important valve (summary of SOLAS II-1/12 on pipes through the collision bulkhead; not downloaded)",
@@ -232,7 +244,7 @@
         {"id": "800", "source": "REG13", "page": 2, "clause": "Regulation 13, 3.2.1.2 (dispensation case only)", "quote": "stairways shall not be less than 800 mm in clear width with handrails on both sides.", "match": "800|dispensation|handrail"},
         {"id": "fore-aft", "source": "USCG-SOLAS-01", "page": 2, "clause": "FSS Code 13.2.2.2, quoted in USCG PRG SOLAS-01", "quote": "All stairways sized for more than 90 persons shall be aligned fore and aft.", "match": "fore and aft|fore-aft|athwart|90 persons|across the ship"},
         {"id": "rise", "source": "USCG-SOLAS-01", "page": 2, "clause": "FSS Code 13.2.2.3, quoted in USCG PRG SOLAS-01", "quote": "Stairways shall not exceed 3.5 m in vertical rise without the provision of a landing and shall not have an angle of inclination greater than 45.", "match": "landing|flight|rise|steep|45|fit|long enough|too narrow for"},
-        {"id": "door", "source": "REG13", "page": 10, "clause": "Regulation 13 guidance G5.1", "quote": "Corridors and doorways providing access to and from stairways or open decks should be of sufficient width to prevent congestion", "match": "emergency doors? into"},
+        {"id": "door", "source": "REG13", "page": 10, "clause": "Regulation 13 guidance G5.1", "quote": "Corridors and doorways providing access to and from stairways or open decks should be of sufficient width to prevent congestion", "match": "emergency doors? into|narrower than the"},
         {"id": "continuity", "source": "REG13", "page": 3, "clause": "Regulation 13, 3.2.4.5", "quote": "The widths, number and continuity of escapes shall be in accordance with the requirements in the Fire Safety Systems Code.", "match": "no door|top deck|bottom deck|door on|one deck"}
       ],
       "plain_meaning": "Escape stairs must be at least 900 mm wide (FSS Code). Stairs serving more than 90 people must run fore and aft with no curves. A flight may rise at most 3.5 m before a landing, at no more than 45 degrees. 800 mm is only accepted where a single means of escape has been allowed by dispensation (Reg 13 3.2.1.2).",
@@ -251,6 +263,7 @@
         "stair_needs_door_at_top_and_bottom": true,
         "fit_note": "Model checks, not separate numbers: run needed = rise per flight / tan(max_inclination_deg); with 2 or more flights per deck the flights fold back side by side, so the stairwell must be 2 x clear width across.",
         "door_to_stair_at_least_stair_width": true,
+        "corridor_to_stair_at_least_stair_width": true,
         "door_to_stair_clause": "Regulation 13 guidance G5.1 (UK MCA copy in docs/): doorways serving stairways should not be less than the width of the stairway"
       },
       "fail_if": "width < 900 -> red; more than 90 persons and not aligned fore and aft -> red; rise > 3.5 m -> red; flights do not fit in the stairwell -> red; no door on the top or bottom deck -> amber; emergency door into the stair narrower than the stair -> amber",
@@ -339,7 +352,8 @@
       "source": "IS-CODE-2008",
       "clause": "IS Code 2008 Part A, 2.2.1 to 2.2.4 (general criteria)",
       "refs": [
-        {"id": "2.2", "source": "IS-CODE-2008", "clause": "IS Code 2008 Part A, 2.2.1 to 2.2.4 (general intact stability criteria)"}
+        {"id": "2.2", "source": "IS-CODE-2008", "clause": "IS Code 2008 Part A, 2.2.1 to 2.2.4 (general intact stability criteria)"},
+        {"id": "3.1", "source": "IS-CODE-2008", "clause": "IS Code 2008 Part A, 3.1 (passenger ships): angle of heel from crowding of passengers to one side, and from turning, not more than 10 degrees", "match": "crowd|turn"}
       ],
       "plain_meaning": "The righting lever curve (GZ) must give enough area, a large enough maximum at a large enough angle, and a minimum initial GM.",
       "inputs_needed": ["hull", "decks", "rooms", "weights"],
@@ -352,9 +366,15 @@
         "min_gz_at_30_deg_or_more_m": 0.2,
         "min_angle_of_max_gz_deg": 25,
         "min_initial_gm_m": 0.15,
-        "amber_within_percent": 10
+        "amber_within_percent": 10,
+        "passenger_rules_apply_above_passengers": 12,
+        "passenger_mass_kg": 75,
+        "passengers_per_m2": 4,
+        "max_heel_crowding_deg": 10,
+        "turning_coefficient": 0.2,
+        "max_heel_turning_deg": 10
       },
-      "fail_if": "any criterion below its minimum",
+      "fail_if": "any criterion below its minimum; passenger ships: heel from passengers crowding to one side or from turning above 10 degrees -> red",
       "assumption_note": "Criteria values quoted from the IS Code 2008, which is not in docs/. Free-surface correction of slack tanks is included; weather criterion and downflooding angle are not modelled.",
       "ask_meyer": "Q6"
     },
@@ -366,7 +386,8 @@
       "source": "SOLAS-III-21",
       "clause": "SOLAS III/21.1.1 (passenger ships on international voyages)",
       "refs": [
-        {"id": "21.1.1", "source": "SOLAS-III-21", "clause": "SOLAS III/21.1.1 (lifeboats each side 50 %, liferafts 25 %)"}
+        {"id": "21.1.1", "source": "SOLAS-III-21", "clause": "SOLAS III/21.1.1 (lifeboats each side 50 %, liferafts 25 %)"},
+        {"id": "13.1.2", "source": "SOLAS-III-21", "clause": "SOLAS III/13.1.2: survival craft stowed as near the water as safe and practicable, but not less than 2 m above the waterline in the deepest seagoing condition (value to confirm)", "match": "waterline"}
       ],
       "plain_meaning": "Lifeboats on each side must together carry at least half of everyone on board, and liferafts must carry at least another quarter. They belong on the embarkation deck next to the assembly stations.",
       "inputs_needed": ["lsa", "people_total", "muster_stations"],
@@ -375,9 +396,10 @@
       "values": {
         "lifeboats_each_side_min_share": 0.5,
         "liferafts_min_share": 0.25,
-        "must_be_on_assembly_deck": true
+        "must_be_on_assembly_deck": true,
+        "min_height_above_waterline_m": 2.0
       },
-      "fail_if": "lifeboat capacity on either side < 50 % of persons, or liferaft capacity < 25 % of persons",
+      "fail_if": "lifeboat capacity on either side < 50 % of persons, or liferaft capacity < 25 % of persons; survival craft less than 2 m above the waterline -> red",
       "assumption_note": "Shares quoted from SOLAS III/21.1.1, which is not in docs/. Short international voyage alternatives are not modelled.",
       "ask_meyer": "Q7"
     },
@@ -534,6 +556,65 @@
       "fail_if": "a cable through a galley, laundry or another engine room, or closer than 0.5 m to an exhaust casing -> amber ('so far as practicable')",
       "assumption_note": "The regulation gives no distance from a casing: 0.5 m is our working value.",
       "ask_meyer": "Q16"
+    },
+
+    {
+      "id": "COLLISION-BULKHEAD",
+      "title": "Collision bulkhead in the right place",
+      "status": "assumed",
+      "source": "SOLAS-II-1-12",
+      "clause": "SOLAS II-1 Regulation 12.1",
+      "refs": [
+        {"id": "12.1", "source": "SOLAS-II-1-12", "clause": "SOLAS II-1/12.1: the collision bulkhead lies not less than 0.05 Lf or 10 m, whichever is less, and not more than 0.08 Lf or 0.05 Lf + 3 m, whichever is greater, aft of the forward perpendicular"}
+      ],
+      "plain_meaning": "The first watertight bulkhead behind the bow takes the hit in a head-on collision. Too close to the bow and it is crushed as well; too far aft and a collision floods too much of the ship.",
+      "inputs_needed": ["watertight_bulkheads", "hull"],
+      "early_warning": "Runs as soon as a watertight bulkhead is placed near the bow. Shows the distance from the forward perpendicular and the allowed band.",
+      "test": "Lf = 96 % of the hull length on the waterline at 85 % of the moulded depth; the forward perpendicular is the forward end of that waterline. Collision bulkhead = forwardmost watertight bulkhead forward of 70 % of the length.",
+      "values": {
+        "lf_waterline_share_of_depth": 0.85,
+        "lf_share_of_waterline_length": 0.96,
+        "min_share_of_lf": 0.05,
+        "min_cap_m": 10,
+        "max_share_of_lf": 0.08,
+        "max_alt_share_of_lf": 0.05,
+        "max_alt_extra_m": 3,
+        "collision_min_x_share_of_length": 0.7,
+        "amber_within_m": 0.5
+      },
+      "fail_if": "distance outside the band -> red; within 0.5 m of a limit, or no watertight bulkhead near the bow -> amber",
+      "assumption_note": "Regulation 12 is not downloaded. Lf uses the 96 % rule only (not the rudder-stock alternative) and no bulbous-bow reference point.",
+      "ask_meyer": "Q18"
+    },
+
+    {
+      "id": "DESIGN-SANITY",
+      "title": "Basic plausibility",
+      "status": "assumed",
+      "source": "MSC-1-CIRC-1533, ILO-MLC-2006, MSC-429-98",
+      "clause": "Plausibility checks: occupancy, headroom, bulkhead deck, parts outside the ship, door widths, ballast",
+      "refs": [
+        {"id": "basic", "source": "MSC-1-CIRC-1533", "page": 3, "clause": "Own plausibility check (no regulation number): the evacuation analysis of MSC.1/Circ.1533 and the other checks take persons, room sizes and door widths as given, so impossible inputs make their results wrong"},
+        {"id": "density", "source": "MSC-1-CIRC-1533", "page": 3, "clause": "MSC.1/Circ.1533 Annex 2, congestion criterion (at 3.5 persons/m2 people can barely move)", "quote": "initial density equal to, or greater than, 3.5 persons/m2", "match": "persons/m2"},
+        {"id": "headroom", "source": "ILO-MLC-2006", "clause": "MLC 2006 Standard A3.1.6(a): minimum headroom 203 cm in seafarer accommodation", "match": "headroom"},
+        {"id": "bhd", "source": "MSC-429-98", "page": 6, "clause": "SOLAS II-1 explanatory notes: the bulkhead deck is the deck up to which the watertight bulkheads are carried", "match": "bulkhead deck"}
+      ],
+      "plain_meaning": "Catches inputs that cannot be real before they spoil the other results: people inside tanks, rooms fuller than people can stand, decks too close to stand up between, a bulkhead deck under water, bulkheads outside the ship, doors wider than their wall, and ballast carried high up.",
+      "inputs_needed": ["rooms", "persons", "decks", "doors", "bulkheads", "tanks"],
+      "early_warning": "Runs on every change.",
+      "test": "Persons per room and per m2, deck-to-deck height of decks with rooms, bulkhead deck height against the draft, bulkhead positions against the hull ends, door width against the wall it sits in, room and corridor sizes, ballast tank bottom against the waterline.",
+      "values": {
+        "no_person_types": ["tank", "void"],
+        "transit_only_types": ["stairwell", "lift"],
+        "max_persons_per_m2": 3.5,
+        "min_deck_to_deck_m": 2.03,
+        "min_room_side_m": 1.0,
+        "min_corridor_width_m": 0.7,
+        "min_door_width_mm": 600
+      },
+      "fail_if": "persons in a tank or void, 3.5 persons/m2 or more, decks with rooms less than 2.03 m apart, bulkhead deck under the waterline, a bulkhead outside the hull, a door wider than its wall -> red; persons placed in stairs or lifts, rooms under 1 m wide, corridors under 0.7 m, doors under 600 mm, ballast tanks entirely above the waterline -> amber",
+      "assumption_note": "Own plausibility limits except 3.5 persons/m2 (Circ.1533) and 2.03 m (MLC headroom, used as an absolute floor for deck-to-deck height). 600 mm doors, 0.7 m corridors and 1 m rooms are our working values to catch impossible inputs.",
+      "ask_meyer": "Q19"
     }
   ],
 
@@ -550,6 +631,8 @@
     "Q13": "What delivery pressure do your fire pumps have, and do you check the hydrant pressure with friction losses? We use 1.2 N/mm2 at the pump and static head only.",
     "Q14": "Which pipes do you route through the collision bulkhead below the bulkhead deck? We allow one forepeak pipe (bilge and ballast main) and nothing else.",
     "Q15": "What clear distance do you keep between fuel oil lines and exhaust pipes, and do you allow fuel lines above accommodation? We use 1.0 m and flag fuel lines through rooms.",
-    "Q16": "Which distance do you keep between main cables and machinery casings, and which spaces do you treat as high fire risk for cable routing? We use 0.5 m and galleys, laundries and engine rooms."
+    "Q16": "Which distance do you keep between main cables and machinery casings, and which spaces do you treat as high fire risk for cable routing? We use 0.5 m and galleys, laundries and engine rooms.",
+    "Q18": "Do you place the collision bulkhead by SOLAS II-1/12.1 with Lf from the 85 % depth waterline, and do you use a bulbous-bow reference point? Our demo ferry's collision bulkhead is 12 m from the forward perpendicular, outside the 5.8 to 9.2 m band.",
+    "Q19": "Which minimum door width, corridor width and room size do you use in early design? We use 600 mm, 0.7 m and 1 m only to catch impossible inputs."
   }
 }

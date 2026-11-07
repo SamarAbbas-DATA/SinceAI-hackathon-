@@ -440,6 +440,28 @@ export function escapeStairWidth(ctx: RuleContext): RuleResult {
         });
       }
     }
+    if (v.corridor_to_stair_at_least_stair_width) {
+      // REG13 guidance G5.1: corridors serving a stairway should not be narrower than the stairway.
+      const corrs = new Map<string, Space>();
+      for (const c of ctx.graph.bySpace.get(s.id) ?? []) {
+        if (c.virtual) continue;
+        const os = ctx.graph.space.get(c.a === s.id ? c.b : c.a);
+        if (os && os.type === "corridor") corrs.set(os.id, os);
+      }
+      const narrowC = [...corrs.values()].filter((c) => Math.min(c.length, c.breadth) * 1000 < st.widthMm - 1);
+      if (narrowC.length) {
+        const w = Math.min(...narrowC.map((c) => Math.min(c.length, c.breadth)));
+        findings.push({
+          status: "amber",
+          message: `${narrowC.length === 1 ? narrowC[0].name : `${narrowC.length} corridors`} leading to ${s.name} ${narrowC.length === 1 ? "is" : "are"} ${fmt(w, 2)} m wide, narrower than the ${st.widthMm} mm stair.`,
+          detail: `${v.door_to_stair_clause}; the same guidance applies to corridors. A corridor narrower than the stair it feeds limits the flow onto the stair, so the stair's width is never used.${narrowC.length > 1 ? ` Corridors: ${narrowC.map((c) => c.name).join(", ")}.` : ""}`,
+          fix: `Widen ${narrowC.length === 1 ? narrowC[0].name : "these corridors"} to at least ${fmt(st.widthMm / 1000, 2)} m, or reduce the stair's clear width (not below ${v.min_width_mm_uscg_fss} mm).`,
+          targets: [s.id, ...narrowC.map((c) => c.id)],
+          measured: `${fmt(w, 2)} m`,
+          limit: `${fmt(st.widthMm / 1000, 2)} m`,
+        });
+      }
+    }
     if (v.handrails_both_sides && !st.handrailsBothSides)
       findings.push({
         status: "red",
@@ -595,7 +617,102 @@ export function intactStability(ctx: RuleContext): RuleResult {
       limit: `${lim} ${unit}`,
     });
   }
-  return result("INTACT-STABILITY", findings, `GM ${fmt(condition.GMt, 2)} m, maximum GZ ${fmt(gz.maxGZ, 2)} m at ${gz.angleMaxGZ} degrees, stable up to ${fmt(gz.rangeDeg, 0)} degrees.`);
+  // IS Code 2008 Part A 3.1, passenger ships: heel from passengers crowding to one side and from turning
+  let paxText = "";
+  const pax = ctx.design.people.passengers;
+  if (pax > v.passenger_rules_apply_above_passengers) {
+    const heel = passengerHeel(ctx);
+    if (heel) {
+      paxText = ` Passenger heel: crowding ${fmt(heel.crowdDeg, 1)} degrees, turning ${fmt(heel.turnDeg, 1)} degrees.`;
+      for (const [what, deg, lim, lever, how] of [
+        ["crowding of passengers to one side", heel.crowdDeg, v.max_heel_crowding_deg, heel.crowdLever, `${pax} passengers of ${v.passenger_mass_kg} kg at ${v.passengers_per_m2} per m2 on the ${heel.crowdSide} side of ${heel.crowdWhere}`],
+        ["turning at service speed", heel.turnDeg, v.max_heel_turning_deg, heel.turnLever, `heeling moment 0.200 x v2 / LWL x displacement x (KG - draft / 2) at ${fmt(ctx.design.hull.designSpeedKn, 1)} kn`],
+      ] as const) {
+        const status: Status = deg > lim ? "red" : deg > lim * (1 - v.amber_within_percent / 100) ? "amber" : "green";
+        if (status === "green") continue;
+        findings.push({
+          status,
+          message: `Heel from ${what} is ${Number.isFinite(deg) ? `${fmt(deg, 1)} degrees` : "more than the ship can resist"}${status === "red" ? `, above the ${lim} degree limit` : `, close to the ${lim} degree limit`}.`,
+          detail: `${how} gives a heeling lever of ${fmt(lever, 3)} m. The ship settles where its GZ curve equals that lever. Passengers and loose items slide and people fall at large heel angles.`,
+          fix: "Raise GM (lower the centre of gravity or widen the hull), or reduce the passenger area far out on one side of the upper decks.",
+          targets: [],
+          measured: Number.isFinite(deg) ? `${fmt(deg, 1)} deg` : "capsizes",
+          limit: `${lim} deg`,
+        });
+      }
+    }
+  }
+  return result("INTACT-STABILITY", findings, `GM ${fmt(condition.GMt, 2)} m, maximum GZ ${fmt(gz.maxGZ, 2)} m at ${gz.angleMaxGZ} degrees, stable up to ${fmt(gz.rangeDeg, 0)} degrees.${paxText}`);
+}
+
+/**
+ * Smallest heel angle (deg) at which GZ equals a constant heeling lever (lever x cos(heel)); Infinity if never.
+ * GZ is taken relative to its value at 0 degrees: the section integration leaves a residual of about 1 cm upright,
+ * which would otherwise hide small heel angles.
+ */
+export function heelForLever(gz: GZResult, lever: number): number {
+  const g0 = gzAt(gz, 0);
+  const net = (d: number) => gzAt(gz, d) - g0 - lever * Math.cos((d * Math.PI) / 180);
+  if (lever <= 0) return 0;
+  const maxDeg = gz.points[gz.points.length - 1]?.deg ?? 0;
+  let prev = 0;
+  for (let d = 0.05; d <= maxDeg; d += 0.05) {
+    const diff = net(d);
+    if (diff >= 0) {
+      // linear interpolation between the last two steps
+      const dPrev = net(prev);
+      return Math.max(0, prev + ((d - prev) * -dPrev) / Math.max(1e-9, diff - dPrev));
+    }
+    prev = d;
+  }
+  return Infinity;
+}
+
+/**
+ * IS Code 2008 Part A 3.1 heeling levers for passenger ships.
+ * Crowding: passengers (75 kg, 4 per m2) fill the deck area of assembly stations, public rooms and corridors on one
+ * side, outboard first, starting on the decks with assembly stations and then the highest decks. Their vertical shift is
+ * not counted. Turning: M = 0.200 v2 / LWL x displacement x (KG - d / 2).
+ */
+export function passengerHeel(ctx: RuleContext): { crowdDeg: number; crowdLever: number; crowdSide: string; crowdWhere: string; turnDeg: number; turnLever: number } | null {
+  const v = ruleDef("INTACT-STABILITY").values;
+  const { design, gz, condition } = ctx;
+  if (!gz || !condition || condition.overloaded) return null;
+  const disp = condition.weights.total.massT;
+  if (disp <= 0) return null;
+  const muster = new Set(design.spaces.filter((s) => s.type === "muster_station").map((s) => s.deckId));
+  const deckZ = new Map(design.decks.map((d) => [d.id, d.z]));
+  const order = [...design.decks].sort((a, b) => (muster.has(b.id) ? 1 : 0) - (muster.has(a.id) ? 1 : 0) || b.z - a.z).map((d) => d.id);
+  const best = { moment: 0, side: "port", where: "" };
+  for (const sgn of [1, -1]) {
+    const parts: { area: number; arm: number; deck: string }[] = [];
+    for (const s of design.spaces) {
+      if (!["muster_station", "public", "corridor"].includes(s.type) || !deckZ.has(s.deckId)) continue;
+      const lo = sgn * (s.yCentre - s.breadth / 2),
+        hi = sgn * (s.yCentre + s.breadth / 2);
+      const a = Math.max(0, Math.min(lo, hi)),
+        b = Math.max(lo, hi);
+      if (b <= a) continue;
+      parts.push({ area: s.length * (b - a), arm: (a + b) / 2, deck: s.deckId });
+    }
+    parts.sort((p, q) => order.indexOf(p.deck) - order.indexOf(q.deck) || q.arm - p.arm);
+    let need = design.people.passengers / v.passengers_per_m2;
+    let moment = 0;
+    const used = new Set<string>();
+    for (const pt of parts) {
+      if (need <= 0) break;
+      const a = Math.min(need, pt.area);
+      moment += a * v.passengers_per_m2 * (v.passenger_mass_kg / 1000) * pt.arm;
+      need -= a;
+      used.add(pt.deck);
+    }
+    if (moment > best.moment) Object.assign(best, { moment, side: sgn > 0 ? "port" : "starboard", where: [...used].map((id) => design.decks.find((d) => d.id === id)?.name ?? id).join(", ") || "the assembly deck" });
+  }
+  const crowdLever = best.moment / disp;
+  const v0 = design.hull.designSpeedKn * 0.5144;
+  const LWL = condition.hydro.LWL || design.hull.LOA;
+  const turnLever = (v.turning_coefficient * v0 * v0 * (condition.KG - condition.T / 2)) / (LWL * 9.81);
+  return { crowdDeg: heelForLever(gz, crowdLever), crowdLever, crowdSide: best.side, crowdWhere: best.where, turnDeg: heelForLever(gz, Math.max(0, turnLever)), turnLever };
 }
 
 // ------------------------------------------------------------------ LSA-CAPACITY
@@ -646,6 +763,26 @@ export function lsaCapacity(ctx: RuleContext): RuleResult {
           fix: `Move it to the embarkation deck (${design.decks.find((d) => musterDecks.has(d.id))?.name ?? "the deck with assembly stations"}).`,
           targets: [l.id],
         });
+  }
+  const c = ctx.condition;
+  if (c && !c.overloaded && v.min_height_above_waterline_m) {
+    const L = design.hull.LOA || 1;
+    for (const l of lsa) {
+      const z = design.decks.find((d) => d.id === l.deckId)?.z;
+      if (z === undefined) continue;
+      const draftHere = c.draftAft + ((c.draftFwd - c.draftAft) * Math.min(Math.max(l.x, 0), L)) / L;
+      const h = z - draftHere;
+      if (h < v.min_height_above_waterline_m)
+        findings.push({
+          status: "red",
+          message: `${l.kind === "lifeboat" ? "Lifeboat" : "Liferaft"} at x ${fmt(l.x, 0)} m is stowed ${h < 0 ? `${m1(-h)} below` : `only ${m1(h)} above`} the waterline.`,
+          detail: `Its deck (${design.decks.find((d) => d.id === l.deckId)?.name}) is at ${m1(z)} and the draft there is ${m1(draftHere)}. Survival craft must stay clear of the sea in the deepest condition, at least ${v.min_height_above_waterline_m} m above the waterline, or waves swamp them before launching.`,
+          fix: `Move it to a higher deck (the assembly deck is best).`,
+          targets: [l.id],
+          measured: m1(h),
+          limit: `${v.min_height_above_waterline_m} m`,
+        });
+    }
   }
   return result("LSA-CAPACITY", findings, `Lifeboats port ${port}, starboard ${stbd}, liferafts ${rafts} places for ${N} persons.`);
 }
@@ -1026,7 +1163,220 @@ export function cableRouting(ctx: RuleContext): RuleResult {
   return result("CABLE-ROUTING", findings, findings.length ? `${plural(findings.length, "cable routing hint")}.` : `All ${plural(cs.length, "main cable")} stay clear of galleys, laundries, other engine rooms and exhaust casings.`);
 }
 
+// ------------------------------------------------------------------ COLLISION-BULKHEAD
+/** Lf and the forward perpendicular (SOLAS II-1/2): 96 % of the waterline length at 85 % of the moulded depth. */
+export function freeboardLength(ctx: RuleContext): { Lf: number; xFP: number } | null {
+  const v = ruleDef("COLLISION-BULKHEAD").values;
+  const { design, ship } = ctx;
+  if (!ship) return null;
+  const z = v.lf_waterline_share_of_depth * design.hull.depth;
+  const L = design.hull.LOA;
+  const wet = (x: number) => halfBreadthAt(ship, x, z) > 0.01;
+  const N = 400;
+  let a = -1,
+    f = -1;
+  for (let i = 0; i <= N; i++) {
+    const x = (L * i) / N;
+    if (wet(x)) {
+      if (a < 0) a = x;
+      f = x;
+    }
+  }
+  if (a < 0) return null;
+  // refine the forward end by bisection
+  let lo = f,
+    hi = Math.min(L, f + L / N);
+  for (let k = 0; k < 30; k++) {
+    const m = (lo + hi) / 2;
+    if (wet(m)) lo = m;
+    else hi = m;
+  }
+  return { Lf: v.lf_share_of_waterline_length * (lo - a), xFP: lo };
+}
+
+export function collisionBulkhead(ctx: RuleContext): RuleResult {
+  const v = ruleDef("COLLISION-BULKHEAD").values;
+  const { design } = ctx;
+  const fl = freeboardLength(ctx);
+  if (!fl) return result("COLLISION-BULKHEAD", [], "Hull not ready.", "grey");
+  const wt = design.bulkheads.filter((b) => b.kind === "watertight").sort((a, b) => a.x - b.x);
+  const minD = Math.min(v.min_share_of_lf * fl.Lf, v.min_cap_m);
+  const maxD = Math.max(v.max_share_of_lf * fl.Lf, v.max_alt_share_of_lf * fl.Lf + v.max_alt_extra_m);
+  const band = `${m1(minD)} to ${m1(maxD)}`;
+  if (!wt.length) return result("COLLISION-BULKHEAD", [], `No watertight bulkheads yet. Place the collision bulkhead ${band} aft of the forward perpendicular (x ${fmt(fl.xFP - maxD)} to ${fmt(fl.xFP - minD)} m).`, "grey");
+  const col = wt[wt.length - 1];
+  const findings: Finding[] = [];
+  if (col.x < v.collision_min_x_share_of_length * design.hull.LOA) {
+    findings.push({
+      status: "amber",
+      message: `There is no watertight collision bulkhead near the bow.`,
+      detail: `The forwardmost watertight bulkhead is at x ${fmt(col.x)} m, ${m1(fl.xFP - col.x)} aft of the forward perpendicular. A head-on collision would flood everything forward of it.`,
+      fix: `Place a watertight bulkhead between x ${fmt(fl.xFP - maxD)} and ${fmt(fl.xFP - minD)} m.`,
+      targets: [col.id],
+    });
+    return result("COLLISION-BULKHEAD", findings, `No collision bulkhead: it belongs ${band} aft of the forward perpendicular.`);
+  }
+  const d = fl.xFP - col.x;
+  const status: Status = d < minD || d > maxD ? "red" : d < minD + v.amber_within_m || d > maxD - v.amber_within_m ? "amber" : "green";
+  if (status !== "green")
+    findings.push({
+      status,
+      message:
+        status === "red"
+          ? `The collision bulkhead is ${m1(d)} aft of the forward perpendicular; it must be ${band}.`
+          : `The collision bulkhead is ${m1(d)} aft of the forward perpendicular, close to the ${d < minD + v.amber_within_m ? "minimum" : "maximum"} of the ${band} band.`,
+      detail: `Lf = ${m1(fl.Lf)} (96 % of the waterline at 85 % of the depth), forward perpendicular at x ${fmt(fl.xFP)} m. ${d > maxD ? "Too far aft: a collision would flood a longer forepeak than allowed." : d < minD ? "Too close to the bow: a collision crushes the bulkhead as well." : "Inside the band, with little room for changes to the bow."}`,
+      fix: `Move the bulkhead at x ${fmt(col.x)} m to between x ${fmt(fl.xFP - maxD)} and ${fmt(fl.xFP - minD)} m.`,
+      targets: [col.id],
+      measured: m1(d),
+      limit: band,
+    });
+  return result("COLLISION-BULKHEAD", findings, `Collision bulkhead ${m1(d)} aft of the forward perpendicular (allowed ${band}, Lf ${m1(fl.Lf)}).`);
+}
+
+// ------------------------------------------------------------------ DESIGN-SANITY
+export function designSanity(ctx: RuleContext): RuleResult {
+  const v = ruleDef("DESIGN-SANITY").values;
+  const { design, condition } = ctx;
+  if (!design.spaces.length) return result("DESIGN-SANITY", [], "Nothing built yet.", "grey");
+  const findings: Finding[] = [];
+  const noPersons: string[] = v.no_person_types;
+  const transit: string[] = v.transit_only_types;
+  // 1. persons where nobody can be
+  const inTanks = design.spaces.filter((s) => s.persons > 0 && noPersons.includes(s.type));
+  if (inTanks.length)
+    findings.push({
+      status: "red",
+      message: `${names(inTanks.map((s) => s.name))} ${inTanks.length === 1 ? "has" : "have"} persons placed inside.`,
+      detail: `Nobody lives in a ${inTanks.map((s) => typeName(s.type)).filter((t, i, a) => a.indexOf(t) === i).join(" or ")}. These persons still count in the weights, the persons on board, the survival craft and the evacuation, which makes all those results wrong.`,
+      fix: `Set "Persons" to 0 for ${inTanks.length === 1 ? inTanks[0].name : "these spaces"} and put the people in cabins or work spaces.`,
+      targets: inTanks.map((s) => s.id),
+    });
+  const inStairs = design.spaces.filter((s) => s.persons > 0 && transit.includes(s.type));
+  if (inStairs.length)
+    findings.push({
+      status: "amber",
+      message: `${names(inStairs.map((s) => s.name))} ${inStairs.length === 1 ? "has" : "have"} persons placed in ${inStairs.length === 1 ? "it" : "them"}.`,
+      detail: "Stairs and lifts are passed through, not occupied. People placed there start the evacuation on the stair itself, which makes the stair flows look better or worse than they are.",
+      fix: "Set their persons to 0 and place the people in the rooms they come from.",
+      targets: inStairs.map((s) => s.id),
+    });
+  // 2. more people than fit (Circ.1533 congestion density)
+  const crowded = design.spaces.filter((s) => s.persons > 0 && !transit.includes(s.type) && s.persons / Math.max(1e-6, s.length * s.breadth) >= v.max_persons_per_m2);
+  for (const s of crowded.slice(0, 6)) {
+    const dens = s.persons / (s.length * s.breadth);
+    findings.push({
+      status: "red",
+      message: `${s.name} holds ${s.persons} persons on ${fmt(s.length * s.breadth)} m2: ${fmt(dens, 1)} persons/m2.`,
+      detail: `At ${v.max_persons_per_m2} persons/m2 people can barely move (MSC.1/Circ.1533 congestion criterion), so this many people cannot live or work in this room. The persons number drives weights, survival craft and evacuation.`,
+      fix: `Lower "Persons" to at most ${Math.floor((s.length * s.breadth * v.max_persons_per_m2) / 3)} (a third of the congestion density) or make ${s.name} larger.`,
+      targets: [s.id],
+      measured: `${fmt(dens, 1)} persons/m2`,
+      limit: `${v.max_persons_per_m2} persons/m2`,
+    });
+  }
+  // 3. decks too close for anyone to stand (MLC headroom 203 cm as an absolute floor for deck-to-deck height)
+  const decks = sortedDecks(design);
+  const used = (id: string) => design.spaces.some((s) => !noPersons.includes(s.type) && spaceDeckIds(design, s).includes(id));
+  for (let i = 0; i < decks.length - 1; i++) {
+    const h = decks[i + 1].z - decks[i].z;
+    if (h < v.min_deck_to_deck_m && used(decks[i].id))
+      findings.push({
+        status: "red",
+        message: `${decks[i].name} has only ${fmt(h, 2)} m to the deck above: less headroom than a person needs.`,
+        detail: `Even before deck plating, beams and ducts take their share, ${fmt(h, 2)} m is below the ${v.min_deck_to_deck_m} m minimum headroom for crew accommodation (MLC 2006). Rooms on ${decks[i].name} cannot be used.`,
+        fix: `Raise ${decks[i + 1].name} in the Design tab (2.8 to 3.2 m deck to deck is usual).`,
+        targets: [decks[i].id],
+        measured: `${fmt(h, 2)} m`,
+        limit: `${v.min_deck_to_deck_m} m`,
+      });
+  }
+  // 4. bulkhead deck under water
+  const bhd = design.decks.find((d) => d.id === design.bulkheadDeckId);
+  if (bhd && condition && !condition.overloaded) {
+    const T = Math.max(condition.draftAft, condition.draftFwd);
+    if (bhd.z <= T)
+      findings.push({
+        status: "red",
+        message: `The bulkhead deck (${bhd.name}, ${m1(bhd.z)}) is under the waterline (draft ${m1(T)}).`,
+        detail: "The watertight bulkheads end at the bulkhead deck. If it is already under water the ship has no watertight subdivision above the sea, and the flooding results mean nothing.",
+        fix: `Pick a higher deck as the bulkhead deck in the Design tab, or reduce the draft.`,
+        targets: [bhd.id],
+        measured: m1(bhd.z),
+        limit: `above ${m1(T)}`,
+      });
+  }
+  // 5. bulkheads outside the ship
+  const L = design.hull.LOA;
+  const out = design.bulkheads.filter((b) => b.x <= 0 || b.x >= L);
+  if (out.length)
+    findings.push({
+      status: "red",
+      message: `${out.length === 1 ? `A ${out[0].kind === "watertight" ? "watertight" : "fire zone"} bulkhead lies` : `${out.length} bulkheads lie`} outside the hull (x ${out.map((b) => fmt(b.x)).join(", ")} m; hull from 0 to ${fmt(L)} m).`,
+      detail: "A bulkhead outside the hull divides nothing, but it still changes the fire zone and flooding results.",
+      fix: "Delete it or move it inside the hull.",
+      targets: out.map((b) => b.id),
+    });
+  // 6. doors that do not fit their wall, or are too narrow to pass
+  const edges = sharedEdges(design);
+  const wallOf = (dr: Design["doors"][number]) => edges.find((e) => e.deckId === dr.deckId && Math.abs((e.x1 - e.x0) * (dr.y - e.y0) - (e.y1 - e.y0) * (dr.x - e.x0)) / Math.max(1e-9, e.length) < 0.3 && dr.x >= Math.min(e.x0, e.x1) - 0.3 && dr.x <= Math.max(e.x0, e.x1) + 0.3 && dr.y >= Math.min(e.y0, e.y1) - 0.3 && dr.y <= Math.max(e.y0, e.y1) + 0.3);
+  const tooWide = design.doors.map((dr) => ({ dr, wall: wallOf(dr) })).filter((x) => x.wall && x.dr.widthMm / 1000 > x.wall.length + 0.01);
+  for (const { dr, wall } of tooWide.slice(0, 6))
+    findings.push({
+      status: "red",
+      message: `An emergency door of ${dr.widthMm} mm sits in a wall only ${m1(wall!.length)} long (x ${fmt(dr.x)} m, y ${fmt(dr.y)} m).`,
+      detail: "A door cannot be wider than the wall it is in. The escape and evacuation checks use the door width for the flow of people, so they would count a passage that does not exist.",
+      fix: `Select the door and set its clear width to ${Math.floor(wall!.length * 1000)} mm or less.`,
+      targets: [dr.id],
+      measured: `${dr.widthMm} mm`,
+      limit: `${Math.floor(wall!.length * 1000)} mm`,
+    });
+  const narrowDoors = design.doors.filter((dr) => dr.widthMm < v.min_door_width_mm);
+  if (narrowDoors.length)
+    findings.push({
+      status: "amber",
+      message: `${plural(narrowDoors.length, "emergency door")} ${narrowDoors.length === 1 ? "is" : "are"} narrower than ${v.min_door_width_mm} mm (narrowest ${Math.min(...narrowDoors.map((d) => d.widthMm))} mm).`,
+      detail: "A person needs about 600 mm to pass a door, more with a life jacket. Narrower doors are not real escape routes.",
+      fix: `Set their clear width to ${v.min_door_width_mm} mm or more.`,
+      targets: narrowDoors.map((d) => d.id),
+    });
+  // 7. rooms and corridors too small to use
+  const tiny = design.spaces.filter((s) => s.persons > 0 && !["corridor", "tank", "void", "stairwell", "lift"].includes(s.type) && Math.min(s.length, s.breadth) < v.min_room_side_m);
+  if (tiny.length)
+    findings.push({
+      status: "amber",
+      message: `${names(tiny.map((s) => s.name))} ${tiny.length === 1 ? "is" : "are"} less than ${m1(v.min_room_side_m)} wide but ${tiny.length === 1 ? "has" : "have"} persons.`,
+      detail: "Nobody can live or work in a room that narrow. It is probably a typing slip in the length or breadth.",
+      fix: "Check the room's length and breadth in the inspector.",
+      targets: tiny.map((s) => s.id),
+    });
+  const slim = design.spaces.filter((s) => s.type === "corridor" && Math.min(s.length, s.breadth) < v.min_corridor_width_m);
+  if (slim.length)
+    findings.push({
+      status: "amber",
+      message: `${names(slim.map((s) => s.name))} ${slim.length === 1 ? "is" : "are"} narrower than ${m1(v.min_corridor_width_m)}.`,
+      detail: "One person needs about 0.7 m to walk; the evacuation flows assume people can pass. Escape corridors are usually 1.2 m or more.",
+      fix: "Widen the corridor.",
+      targets: slim.map((s) => s.id),
+    });
+  // 8. ballast carried above the waterline
+  if (condition && !condition.overloaded) {
+    const high = design.spaces.filter((s) => s.type === "tank" && s.tank?.content === "ballast" && s.tank.fillPct > 0 && (design.decks.find((d) => d.id === s.deckId)?.z ?? 0) > condition.T);
+    if (high.length)
+      findings.push({
+        status: "amber",
+        message: `${names(high.map((s) => s.name))} ${high.length === 1 ? "carries" : "carry"} ballast entirely above the waterline.`,
+        detail: "Ballast is carried low to lower the centre of gravity. Water above the waterline raises it and reduces GM, the opposite of what ballast is for.",
+        fix: "Empty these tanks and ballast tanks in the double bottom instead.",
+        targets: high.map((s) => s.id),
+      });
+  }
+  return result("DESIGN-SANITY", findings, findings.length ? `${plural(findings.length, "input")} that cannot be right.` : "Persons, deck heights, bulkhead deck, bulkheads, doors, room sizes and ballast are all plausible.");
+}
+
 export const RULE_FUNCS: Record<string, (ctx: RuleContext) => RuleResult> = {
+  "COLLISION-BULKHEAD": collisionBulkhead,
+  "DESIGN-SANITY": designSanity,
   "PIPE-FIRE-MAIN": pipeFireMain,
   "PIPE-WATERTIGHT": pipeWatertight,
   "PIPE-FUEL-HOT": pipeFuelHot,

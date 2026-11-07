@@ -32,7 +32,7 @@ Other commands:
 
 | Command | What it does |
 |---|---|
-| `npm test` | Runs the verification suite (106 unit and physics tests) |
+| `npm test` | Runs the verification suite (117 unit and physics tests) |
 | `npm run e2e` | Browser test with `npm run dev` running: drives the real app in headless Chrome or Edge (placing, overlap refusal, dragging, undo, all four test animations, PDF download). Screenshots and the PDF land in `e2e-output/` |
 | `npm run report` | Prints a full engineering report of the demo ship in the terminal |
 | `npm run report -- my.design.json` | Same report for a design you saved from the app |
@@ -72,6 +72,7 @@ Not supported yet: STEP and IGES (they need a large OpenCascade WebAssembly modu
 | Fire | Main vertical zone size from hull outline per deck; division ratings between room types | our code |
 | Resistance | Holtrop-Mennen calm water resistance and effective power | vessel.js `HullResistance` |
 | Seakeeping | Heave, pitch and roll in regular waves (closed form) | vessel.js `WaveMotion` |
+| Subdivision and plausibility | Collision bulkhead position (SOLAS II-1/12.1, Lf on the 85 % depth waterline); passenger heel from crowding and turning (IS Code 3.1); survival craft height above the waterline; impossible inputs (people in tanks, overfull rooms, low decks, bulkhead deck under water, doors wider than walls) | our code on vessel.js |
 | Pipes and cables | Fire main per deck and fire zone, connection to the pumps and pump pressure (static head); watertight bulkhead and collision bulkhead penetrations; fuel oil clearance to exhaust; main cables clear of galleys, laundries and machinery casings | our code |
 
 ## How the results were verified
@@ -87,6 +88,7 @@ Not supported yet: STEP and IGES (they need a large OpenCascade WebAssembly modu
 - **Files** (`tests/io.test.ts`): design JSON round trip is lossless. Exporting to vessel.js format and importing back gives identical hydrostatics.
 - **Features** (`tests/features.test.ts`): slack-tank free-surface correction equals rho·l·b³/12 / displacement; an offsets CSV box gives box hydrostatics; overlap detection; stamps and auto doors; lifeboat capacity; every finding carries a fix.
 - **Pipes and cables** (`tests/systems.test.ts`): segment distances and clipping against hand values, deckhead heights and riser lengths, the default arrangement, and each pipe and cable rule turned red or amber by a targeted edit.
+- **Audit checks** (`tests/audit.test.ts`): heel for a constant lever against tan(phi) = l / GM, the turning lever 0.2 v2/(g LWL)(KG - T/2), the crowding lever, the collision bulkhead band from Lf, and impossible inputs (people in tanks, overfull rooms, low decks, a bulkhead deck under water, doors wider than their wall).
 - **Browser** (`scripts/e2e.mjs`): 32 checks on the running app, including placing, overlap refusal, drag snap-back, undo, the four test animations, the PDF download, drawing and dragging a pipe, and the pipe and cable toggles.
 
 ## Known limits (read before trusting a number)

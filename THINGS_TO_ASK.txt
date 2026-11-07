@@ -110,6 +110,26 @@ Q17 Default pipes and cables (src/engine/generators.ts defaultRuns)
     Sizes: fire main 200 mm, bilge 300 mm, fuel 100 mm, exhaust 900 mm, HV bundle 120 mm, feeder 80 mm.
     Pipes and cables add no weight to the stability calculation yet.
 
+Q18 Collision bulkhead position (rule COLLISION-BULKHEAD, SOLAS II-1/12.1, not downloaded)
+    Band: not less than 0.05 Lf or 10 m (whichever is less) and not more than 0.08 Lf or 0.05 Lf + 3 m
+    (whichever is greater) aft of the forward perpendicular. We take Lf = 96 % of the waterline length at 85 %
+    of the moulded depth (not the rudder-stock alternative) and no bulbous-bow reference point. The demo
+    ferry's collision bulkhead (x 108 m) is 12.0 m aft of the forward perpendicular, outside the 5.8 to 9.2 m
+    band, and is now red. The model ships are inside their band.
+
+Q19 Plausibility limits (rule DESIGN-SANITY)
+    Only to catch impossible inputs: no persons in tanks or voids; below 3.5 persons/m2 in any room
+    (Circ.1533 congestion density); deck-to-deck height of decks with rooms at least 2.03 m (MLC 2006 A3.1
+    headroom, used as an absolute floor; not downloaded); bulkhead deck above the waterline; bulkheads inside
+    the hull; doors no wider than their wall and at least 600 mm; rooms with persons at least 1 m wide;
+    corridors at least 0.7 m; no ballast entirely above the waterline. 600 mm, 0.7 m and 1 m are our values.
+
+Q20 Passenger heel (rule INTACT-STABILITY, IS Code 2008 Part A 3.1, not downloaded)
+    Crowding: 75 kg per passenger, 4 per m2, on the deck area of assembly stations, public rooms and
+    corridors of one side, outboard first, assembly decks first; the rise of their centre of gravity is not
+    counted. Turning: M = 0.200 v2 / LWL x displacement x (KG - d/2) at the design speed. Both: heel at most
+    10 degrees. Survival craft at least 2 m above the waterline (SOLAS III/13.1.2, value to confirm).
+
 DOCUMENTS STILL MISSING
 - (done) US Coast Guard stair guideline is in docs/.
 - SOLAS II-1/7-3 permeability table, IS Code 2008 Part A, SOLAS III/21: needed to move Q5 to Q7
