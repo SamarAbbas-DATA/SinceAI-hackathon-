@@ -73,9 +73,10 @@ async function main() {
     await sleep(250);
   }
   check("app loads and analysis runs", await ev(`!!${S}.analysis && ${S}.analysis.errors.length === 0`));
-  check("starts from the default demo ferry", await ev(`${S}.design.name.startsWith('Demo') && ${S}.design.spaces.length === 115`), await ev(`${S}.design.name + ', ' + ${S}.design.spaces.length + ' spaces'`));
-  await sleep(1800); // the guided tour opens itself on a first visit; close it so it does not cover the 3D view
-  check("guided tour opens on the first visit", (await ev(`${S}.tourStep`)) === 0);
+  check("starts from the default demo ferry", await ev(`${S}.design.name.startsWith('Demo') && ${S}.design.spaces.length === 118`), await ev(`${S}.design.name + ', ' + ${S}.design.spaces.length + ' spaces'`));
+  await sleep(1800); // the guided tour opens itself on every start; close it so it does not cover the 3D view
+  check("guided tour opens on every start", (await ev(`${S}.tourStep`)) === 0);
+  check("emergency door icons are hidden until switched on", (await ev(`${S}.view.showDoors`)) === false);
   await shot("tour");
   await ev(`${S}.set({ tourStep: null, activeDeckId: 'D3' })`);
   await sleep(2500);
@@ -170,6 +171,20 @@ async function main() {
   await ev(`${S}.undo(); ${S}.set({ tool: { kind: 'select' } })`);
   await sleep(400);
 
+  // escape route tool: a cabin without its door gets it back and its route is shown
+  await ev(`${S}.edit((d) => { d.doors = d.doors.filter((q) => !(q.deckId === 'D3' && q.x === 34 && q.y === 1)); })`);
+  await sleep(400);
+  const r0 = await ev(`${S}.design.doors.length`);
+  await ev(`${S}.set({ tool: { kind: 'route' } })`);
+  await click(await ev(`window.__project(34, 3.5, 9.02)`));
+  await sleep(700);
+  const routeConn = await ev(`(() => { const d = ${S}.design.doors.at(-1); const c = ${S}.analysis.graph.conns.find(k => k.id === d.id); return c ? [c.a, c.b].sort().join(' + ') : 'none'; })()`);
+  const routeToast = await ev(`${S}.toast?.text ?? ''`);
+  check("escape route tool connects a room and shows its route", (await ev(`${S}.design.doors.length`)) === r0 + 1 && routeConn === 'D3-cabP32 + D3-corr1' && (await ev(`${S}.view.showRoutes`)) && /Escape route from D3 cabin P32/.test(routeToast), routeToast.slice(0, 90));
+  await shot("escape-route");
+  await ev(`${S}.undo(); ${S}.undo(); ${S}.setView({ showRoutes: false }); ${S}.set({ tool: { kind: 'select' } })`);
+  await sleep(400);
+
   // test mode: waves
   await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: '3d' })); ${S}.set({ mode: 'test', panel: 'test' }); ${S}.setTest({ kind: 'sea', running: true, restart: Date.now() })`);
   await sleep(4500);
@@ -185,7 +200,7 @@ async function main() {
 
   const lost = await ev(`${S}.analysis.flood.cases.findIndex(c => !c.survives)`);
   await ev(`${S}.setTest({ kind: 'flood', floodCase: ${Math.max(0, lost)}, restart: Date.now() })`);
-  await sleep(7500);
+  await sleep(9000); // headless rendering is slow; the animation needs about 7.5 s
   const fl = await ev(`({ p: window.__live.floodProgress, fwd: window.__live.draftFwd })`);
   check("flooding test reaches the damaged waterline", fl.p > 0.99 && fl.fwd > 5.5, JSON.stringify(fl));
   await shot("test-flood");
@@ -203,6 +218,35 @@ async function main() {
   const pdfs = fs.readdirSync(outDir).filter((f) => f.endsWith(".pdf"));
   const size = pdfs.length ? fs.statSync(path.join(outDir, pdfs[pdfs.length - 1])).size : 0;
   check("PDF report downloads", pdfs.length > before && size > 20000, `${pdfs.at(-1)} ${Math.round(size / 1024)} kB`);
+
+  // model picker: switch to Icon of the Seas, edit, switch away and back; the edit is kept in memory
+  await ev(`${S}.set({ mode: 'design', panel: 'issues' })`);
+  await sleep(300);
+  const pick = async (label) => {
+    await ev(`document.querySelector('[data-tour=models] button').click()`);
+    await sleep(250);
+    await ev(`[...document.querySelectorAll('[data-tour=models] div button')].find(b => b.textContent.includes(${JSON.stringify(label)})).click()`);
+    await sleep(2500);
+  };
+  await pick("Icon of the Seas");
+  const icon = await ev(`({ name: ${S}.design.name, decks: ${S}.design.decks.length, spaces: ${S}.design.spaces.length, errors: ${S}.analysis?.errors.length, red: ${S}.analysis?.rules.filter(r => r.status === 'red').map(r => r.ruleId).join(',') })`);
+  check("model picker loads Icon of the Seas (20 decks, only the fire zone width red)", icon.name === "Icon of the Seas" && icon.decks === 20 && icon.errors === 0 && icon.red === "FIRE-ZONE-SIZE", JSON.stringify(icon));
+  await shot("model-icon");
+  await ev(`${S}.edit(d => { d.spaces.find(s => s.type === 'cabin').name = 'E2E renamed cabin'; })`);
+  await pick("Demo ferry");
+  const back = await ev(`({ name: ${S}.design.name, spaces: ${S}.design.spaces.length })`);
+  await pick("Icon of the Seas");
+  const kept = await ev(`${S}.design.spaces.some(s => s.name === 'E2E renamed cabin') && ${S}.past.length > 0`);
+  check("switching models keeps each model's edits", back.name.startsWith("Demo") && back.spaces > 100 && kept, JSON.stringify(back));
+  check("leaving the page warns about unsaved edits", await ev(`${S}.hasUnsavedEdits()`));
+  await shot("model-icon-framed");
+  await pick("Demo ferry");
+  // tour step for the model picker shows its image
+  await ev(`${S}.set({ tourStep: 3 })`);
+  await sleep(1200);
+  check("tour has a model picker step with an image", await ev(`!!document.querySelector('img[src="/tour/model-ships.svg"]')?.complete && document.querySelector('img[src="/tour/model-ships.svg"]').naturalWidth > 0`));
+  await shot("tour-models");
+  await ev(`${S}.set({ tourStep: null })`);
 
   const errors = await ev(`${S}.analysis.errors`);
   check("no calculation errors", errors.length === 0, errors.join("; "));

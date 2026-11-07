@@ -4,8 +4,8 @@ import { OrbitControls, Edges, Html, Line, GizmoHelper, GizmoViewport } from "@r
 import * as THREE from "three";
 import { useStore, newId, live } from "../store";
 import { createShip, spaceVertical, spaceDeckIds, sortedDecks, deckHeight, halfBreadthAt, motions, G, centreOutsideHull } from "../../engine/vessel";
-import { rectOf, spacesOnDeck, sharedEdges, OUTSIDE, overlapsWith } from "../../engine/topology";
-import { cabinBlock, stairCore, doorSpot, type DoorSpot } from "../../engine/generators";
+import { rectOf, spacesOnDeck, sharedEdges, OUTSIDE, overlapsWith, buildGraph, shortestRoute } from "../../engine/topology";
+import { cabinBlock, stairCore, doorSpot, autoDoors, type DoorSpot } from "../../engine/generators";
 import { gzAt } from "../../engine/stability";
 import type { Design, Space, LSA } from "../../engine/types";
 import { pairKey } from "../../engine/types";
@@ -108,8 +108,9 @@ function CameraRig() {
     const ctl = () => controls as unknown as { target: THREE.Vector3; update: () => void } | null;
     const onView = (e: Event) => {
       const mode = (e as CustomEvent).detail as string;
-      const target = new THREE.Vector3(L / 2, 6, 0);
-      const pos = mode === "plan" ? new THREE.Vector3(L / 2, L * 1.2, 0.01) : mode === "side" ? new THREE.Vector3(L / 2, 7, L * 1.05) : mode === "bow" ? new THREE.Vector3(L * 1.45, 18, 30) : new THREE.Vector3(L * 0.1 - 35, 48, 95);
+      const k = Math.max(1, L / 120); // bigger ships: same framing, further away (k = 1 for ships up to 120 m)
+      const target = new THREE.Vector3(L / 2, 6 * k, 0);
+      const pos = mode === "plan" ? new THREE.Vector3(L / 2, L * 1.2, 0.01) : mode === "side" ? new THREE.Vector3(L / 2, 7 * k, L * 1.05) : mode === "bow" ? new THREE.Vector3(L * 1.45, 18 * k, 30 * k) : new THREE.Vector3(L * 0.1 - 35 * k, 48 * k, 95 * k);
       goal.current = { target, pos };
     };
     const onFocus = (e: Event) => {
@@ -127,6 +128,15 @@ function CameraRig() {
       window.removeEventListener("viewport:focus", onFocus);
     };
   }, [camera, controls, design.hull.LOA]);
+  // a different model ship was chosen: frame it (skipped on first load, the camera starts there already)
+  const modelId = useStore((s) => s.modelId);
+  const firstModel = useRef(modelId);
+  useEffect(() => {
+    if (modelId === firstModel.current) return;
+    firstModel.current = "";
+    const t = setTimeout(() => window.dispatchEvent(new CustomEvent("viewport:view", { detail: "3d" })), 60);
+    return () => clearTimeout(t);
+  }, [modelId]);
   useFrame((_, dt) => {
     const g = goal.current;
     const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null;
@@ -711,6 +721,10 @@ function Doors({ visibleDeckIds }: { visibleDeckIds: Set<string> }) {
   const selection = useStore((s) => s.selection);
   const activeDeckId = useStore((s) => s.activeDeckId);
   const testing = useStore((s) => s.mode === "test");
+  // Exit icons are hidden by default (too busy); they show when the "Emergency doors" view toggle is on,
+  // while the door tool is active (active deck only), and on the selected door.
+  const showDoors = useStore((s) => s.view.showDoors);
+  const doorTool = useStore((s) => s.tool.kind === "door");
   const deckZ = new Map(design.decks.map((d) => [d.id, d.z]));
   const conns = analysis?.graph.conns ?? [];
   return (
@@ -744,9 +758,9 @@ function Doors({ visibleDeckIds }: { visibleDeckIds: Set<string> }) {
           <group key={d.id} position={[d.x, d.y, z0]}>
             <mesh position={[0, 0, 1.05]} renderOrder={6} {...pick}>
               <boxGeometry args={alongY ? [0.6, w, 2.1] : [w, 0.6, 2.1]} />
-              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} roughness={0.7} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={showDoors || sel ? 0.6 : 0.3} roughness={0.7} />
             </mesh>
-            {!testing && (d.deckId === activeDeckId || sel || bad || (st && st !== "green")) && <ExitIcon color={color} z={2.6} pick={pick} />}
+            {!testing && (sel || (showDoors && (d.deckId === activeDeckId || bad || (st && st !== "green"))) || (doorTool && d.deckId === activeDeckId)) && <ExitIcon color={color} z={2.6} pick={pick} />}
           </group>
         );
       })}
@@ -863,6 +877,7 @@ function FlagPins() {
 function Routes({ visibleDeckIds }: { visibleDeckIds: Set<string> }) {
   const design = useStore((s) => s.design);
   const evac = useStore((s) => s.analysis?.evac);
+  const graph = useStore((s) => s.analysis?.graph);
   const selection = useStore((s) => s.selection);
   const deckZ = new Map(design.decks.map((d) => [d.id, d.z]));
   if (!evac?.ok) return null;
@@ -873,6 +888,14 @@ function Routes({ visibleDeckIds }: { visibleDeckIds: Set<string> }) {
     const pts: [number, number, number][] = [[s.xCentre, s.yCentre, (deckZ.get(s.deckId) ?? 0) + 0.6]];
     for (const st of r.steps) pts.push([st.conn.x, st.conn.y, (deckZ.get(st.conn.deckId) ?? 0) + 0.6]);
     lines.push({ pts, hi: selection?.id === sid });
+  }
+  // A selected room with no persons has no evacuation assignment: draw its shortest route anyway.
+  const selSpace = selection?.kind === "space" && !evac.assignments.has(selection.id) && graph ? design.spaces.find((x) => x.id === selection.id) : undefined;
+  const selRoute = selSpace && visibleDeckIds.has(selSpace.deckId) ? shortestRoute(graph!, selSpace.id, (q) => q.type === "muster_station") : null;
+  if (selSpace && selRoute) {
+    const pts: [number, number, number][] = [[selSpace.xCentre, selSpace.yCentre, (deckZ.get(selSpace.deckId) ?? 0) + 0.6]];
+    for (const st of selRoute.steps) pts.push([st.conn.x, st.conn.y, (deckZ.get(st.conn.deckId) ?? 0) + 0.6]);
+    lines.push({ pts, hi: true });
   }
   return (
     <>
@@ -1182,6 +1205,28 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
       const name = (sid?: string) => st.design.spaces.find((q) => q.id === sid)?.name ?? "";
       if (w.b) st.notify(`Emergency door ${w.widthMm} mm added between ${name(w.a)} and ${name(w.b)}.`, "ok");
       else st.notify(`Emergency door added on an outer wall of ${name(w.a)}: it only counts once there is a space on the other side.`, "info");
+    } else if (tool.kind === "route") {
+      // Escape route tool: connect the clicked room to its neighbouring corridors / stairwells (auto doors),
+      // then show and describe its route to an assembly station. Uses the same graph as the checks.
+      e.stopPropagation();
+      const s = st.design.spaces.find((q) => spaceDeckIds(st.design, q).includes(deck.id) && Math.abs(p.x - q.xCentre) <= q.length / 2 && Math.abs(p.y - q.yCentre) <= q.breadth / 2);
+      if (!s) return st.notify("Click inside a room to give it an escape route.", "info");
+      if (["stairwell", "muster_station", "lift", "tank", "void"].includes(s.type))
+        return st.notify(`${s.name} is a ${TYPE_LABEL[s.type].toLowerCase()}: it does not need an escape route of its own. Click a room people use.`, "info");
+      const doors = autoDoors(st.design, s.id);
+      if (doors.length) st.edit((d) => void d.doors.push(...doors));
+      st.setView({ showRoutes: true });
+      st.select({ kind: "space", id: s.id });
+      const now = useStore.getState().design;
+      const g = buildGraph(now);
+      const r = shortestRoute(g, s.id, (q) => q.type === "muster_station");
+      const added = doors.length ? `Added ${doors.length} emergency door${doors.length > 1 ? "s" : ""}. ` : "";
+      if (!r) st.notify(`${added}${s.name} still has no escape route to an assembly station. Place a corridor or stairwell next to it, then click it again.`, "error");
+      else {
+        const via = r.steps.map((x) => g.space.get(x.space)).filter((x) => x && x.type === "stairwell").map((x) => x!.name);
+        const to = g.space.get(r.steps[r.steps.length - 1].space)?.name ?? "the assembly station";
+        st.notify(`${added}Escape route from ${s.name}: ${Math.round(r.length)} m${via.length ? ` via ${[...new Set(via)].join(", ")}` : ""} to ${to} (shown in red).`, doors.length ? "ok" : "info");
+      }
     } else if (tool.kind === "bulkhead") {
       e.stopPropagation();
       const id = newId(tool.bk === "watertight" ? "wt" : "mvz");

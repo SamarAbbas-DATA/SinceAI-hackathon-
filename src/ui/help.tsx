@@ -211,12 +211,20 @@ export function SourcesPanel() {
 
 // ------------------------------------------------------------------ Interactive tour
 
-const STEPS: { target: string; title: string; text: string }[] = [
+// Optional image per step (files in public/; replace public/tour/model-ships.svg with a screenshot if you like,
+// same name, or change the path here).
+const STEPS: { target: string; title: string; text: string; image?: string }[] = [
   { target: "menu", title: "Menus", text: "Everything the tool can do is in these menus. Click one to open it, click another to switch." },
   { target: "mode", title: "Design and Test", text: "Design mode is for building. Test mode puts the ship in waves, heels it, floods it or runs the evacuation, with live dials." },
   { target: "decks", title: "Decks", text: "Choose the deck you are working on. Decks above it are hidden so you can see inside." },
-  { target: "hotbar", title: "Build bar", text: "Pick a space type or a stamp here, then click on the deck. Number keys 1 to 9 select spaces." },
-  { target: "tools", title: "Tools", text: "Select and move, doors, watertight and fire zone bulkheads, lifeboats and liferafts." },
+  {
+    target: "models",
+    title: "Model ships",
+    text: "Pick the ship to work on: the demo ferry, or Icon of the Seas, Star of the Seas, Legend of the Seas and Mein Schiff 7, built from their published main data. Your edits to each model stay while you switch; they are only lost when the page is reloaded.",
+    image: "/tour/model-ships.svg",
+  },
+  { target: "hotbar", title: "Build bar", text: "Pick a space type or a stamp here, then click on the deck. Number keys 1 to 9 select spaces. Escape route (E): click a room to connect it and see its way out." },
+  { target: "tools", title: "Tools", text: "Select and move, emergency doors, watertight and fire zone bulkheads, lifeboats and liferafts. The icons below switch views on and off: hull, waterline, bulkheads, escape routes, emergency door icons and space names." },
   { target: "viewport", title: "3D view", text: "Drag a space to move it, it snaps to neighbours and never overlaps. Hover to lift a space, double-click to fly to it, scroll to zoom where the mouse points." },
   { target: "tabs", title: "Results", text: "Issues lists every flag with what is wrong and how to fix it. The other tabs show hydrostatics, stability, damage, evacuation and performance." },
   { target: "score", title: "Score", text: "The compliance score updates on every change. Green rules pass, amber are close to a limit, red are broken." },
@@ -238,9 +246,11 @@ export function Tour() {
   const s = STEPS[step];
   const pad = 6;
   const r = rect;
-  const below = r.bottom + 190 < window.innerHeight;
-  const cardTop = below ? r.bottom + 28 : Math.max(12, r.top - 190);
-  const cardLeft = Math.min(Math.max(12, r.left + r.width / 2 - 170), window.innerWidth - 352);
+  const cardW = s.image ? 420 : 340;
+  const cardH = s.image ? 400 : 190;
+  const below = r.bottom + cardH < window.innerHeight;
+  const cardTop = below ? r.bottom + 28 : Math.max(12, r.top - cardH);
+  const cardLeft = Math.min(Math.max(12, r.left + r.width / 2 - cardW / 2), window.innerWidth - cardW - 12);
   const arrowX = r.left + r.width / 2;
   return (
     <div className="fixed inset-0 z-50">
@@ -253,15 +263,16 @@ export function Tour() {
           <path d="M12 2 L20 14 H14 V22 H10 V14 H4 Z" fill="currentColor" />
         </svg>
       </div>
-      <div key={step} className="anim-wipe absolute w-[340px] rounded-md border border-line bg-surface p-4 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.6)]" style={{ left: cardLeft, top: cardTop }}>
+      <div key={step} className="anim-wipe absolute rounded-md border border-line bg-surface p-4 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.6)]" style={{ left: cardLeft, top: cardTop, width: cardW }}>
+        {s.image && <img src={s.image} alt="" className="mb-3 block aspect-[760/340] w-full rounded border border-line object-cover" />}
         <div className="mb-1 text-[10px] tracking-wider text-muted uppercase">
           Step {step + 1} of {STEPS.length}
         </div>
         <div className="mb-1 text-sm font-semibold">{s.title}</div>
         <p className="text-xs leading-relaxed text-muted">{s.text}</p>
         <div className="mt-3 flex justify-between">
-          <Btn kind="ghost" onClick={() => set({ tourStep: null })}>
-            Skip
+          <Btn kind="ghost" onClick={() => set({ tourStep: null })} title="Close the tour (Esc). Restart it any time from Help or with ?">
+            Skip tour
           </Btn>
           <div className="flex gap-1">
             <Btn disabled={step === 0} onClick={() => set({ tourStep: step - 1 })}>

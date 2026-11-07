@@ -38,6 +38,22 @@ Done in session 5 (2026-11-07):
 - Rooms whose centre is outside the hull (in the water) are refused when placing, stamping, dragging, typing coordinates or duplicating (centreOutsideHull).
 - Tests: 63 unit/physics, 17 browser checks.
 
+Done in session 6 (2026-11-07, branch samar-version):
+- Interactive tour opens on every start (not only the first visit); every step has "Skip tour" (Esc also closes it).
+- Emergency door icons are hidden by default. New view toggle "Emergency door icons" (tool rail and View menu) shows them and brightens the doors; they also show on the active deck while the door tool is on, and on the selected door.
+- Hover/active tiles on the tool rail and build bar are stronger (same colours, more opacity).
+- Demo ferry shows 5 reference-ship hints (REFERENCE-SHIPS, from docs/Sources; rule logic unchanged, only the demo design): two Deck 4 family cabins sleep 3 in 16 m2 (5.3 m2 per person, GA 23007 gives 7.5); an open Deck 6 sun deck only 2.3 m above Deck 5 (G.O. Sars smallest 2.5 m); and on Decks 2, 3 and 4 a small room aft of Stair B (crew store, laundry, pantry) with a connecting door to cabin S52, whose escape route runs through it (NOAA 2.4.2). Each cabin keeps a corridor door in its far corner (5 m from the connecting door). Side effects: three amber "exits only 2.2 m apart" flags for those small rooms; Deck 6 adds deck steel, so GM 5.51 to 4.99 m and freeboard 3.52 to 3.33 m (all stability and flooding checks still pass). WEIGHT-MARGIN stays green: forcing it would need several thousand tonnes and break the other showcase results. Score 60. The rule card "Open PDF" link opens the matching file in docs/Sources.
+- Escape route tool (bottom bar, hotkey E, also Build menu): click a room; missing emergency doors to its neighbouring corridors / stairwells are added (autoDoors), escape routes are switched on, the room is selected and its route to an assembly station is drawn in red with a message (length, stairs, assembly station). Rooms with no persons get their route drawn too. Uses the same graph and shortestRoute as the checks; no rule changed.
+- Tests: 64 unit/physics, 19 browser checks (flooding animation wait raised from 7.5 to 9 s: it was flaky on slow headless runs).
+
+Done in session 7 (2026-11-07, branch samar-version):
+- Model ships: picker at the top right of the 3D view (replaces the design name in the header) with the demo ferry, Icon of the Seas (2023), Star of the Seas (2025), Legend of the Seas (2026) and Mein Schiff 7 (2024). Built by a parametric generator in src/data/ships.ts from published main data (sources in the file and THINGS_TO_ASK Q12). Checks: Icon class only red on fire zone width (real 48.47 m beam vs the 40 m rule, kept on purpose), Mein Schiff 7 all green; both have amber stair-queue hints. scripts/check-ships.ts prints every model's results; scripts/calibrate-ships.ts recalibrates lightship/KG.
+- Switching models keeps each model's edits and undo history in memory (no download, no prompt); the browser asks before reload/close when any model has edits.
+- Deck bar shows compact numbers when a ship has more than 8 decks; 3D view frames the chosen ship (camera presets scale with length above 120 m; the demo view is unchanged).
+- Interactive tour has a "Model ships" step with an image (public/tour/model-ships.svg, replace with a screenshot of the same name if wanted).
+- Speed: connections() caches spaces per deck and disjointRoutes() uses a reverse-name array instead of scanning its id map (same results). Icon-class analysis about 0.4 s (was 1.2 s); demo faster too.
+- Tests: 84 unit/physics (tests/ships.test.ts new), 23 browser checks.
+
 ## To-do
 ### Docs and data
 - [ ] Download the USCG stair PDF by hand (see THINGS_TO_ASK.txt)

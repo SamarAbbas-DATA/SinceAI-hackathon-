@@ -63,6 +63,23 @@ Q11 Reference sizes (rule REFERENCE-SHIPS, amber hints only)
     Now: 7.5 m2 per person (2-person cabins of 15 m2 on GA 23007) and 2.5 m between decks (G.O. Sars).
     These come from research vessels, so passenger cabins may legitimately be smaller.
 
+Q12 Model ships (src/data/ships.ts: Icon / Star / Legend of the Seas, Mein Schiff 7)
+    Main data are published figures: Icon class 364.75 m overall, 48.47 m moulded breadth, 9.25 m draught,
+    20 decks, 7,600 guests maximum, 2,350 crew; Mein Schiff 7 315.7 m, 35.8 m, 8.2 m draught (one source only),
+    16 decks, 2,894 passengers, 1,000 crew. Everything else is our assumption, please correct:
+    - Interior: simplified block layout (stair core at each end of every fire zone, central corridor, one room
+      block per side). The real general arrangements are not public. Star and Legend differ from Icon only in
+      galley positions and upper deck extent; we found no public data that tells them apart structurally.
+    - Deck height 3.0 m, Deck 1 at 3.0 m above keel, bulkhead deck Deck 5, hull depth 21 m (Icon) / 15 m (MS7).
+    - Lifeboat capacity 370 persons (Icon class, as on the Oasis class) and 150 (Mein Schiff 7), liferafts 150.
+    - Lightship weight, LCG and KG are calibrated (scripts/calibrate-ships.ts) so the ship floats level at the
+      published draught with GM 10.5 m. The vessel.js cruise hull form has a low block coefficient (about 0.41),
+      so displacement is lower and GM higher than on the real ships; real lightship and KG would replace this.
+    - The Icon class shows a red fire zone width (48.4 m against the 40 m in rules.json, see Q8; SOLAS
+      II-2/9.2.2.1.1 allows up to 48 m in some cases). Kept on purpose: rules unchanged.
+    - Stair queues (amber) come from the simplified Circ.1533 method with one assembly deck under ten guest
+      decks; total evacuation time is well inside the limit.
+
 DOCUMENTS STILL MISSING
 - (done) US Coast Guard stair guideline is in docs/.
 - SOLAS II-1/7-3 permeability table, IS Code 2008 Part A, SOLAS III/21: needed to move Q5 to Q7

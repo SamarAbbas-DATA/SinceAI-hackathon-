@@ -3,6 +3,7 @@ import type { Design, Space, SpaceType } from "../engine/types";
 import { normalizeDesign } from "../engine/types";
 import { analyze, type Analysis } from "../engine/analyze";
 import { demoDesign } from "../data/demoDesign";
+import { MODELS } from "../data/ships";
 import { overlapsWith } from "../engine/topology";
 import { centreOutsideHull } from "../engine/vessel";
 
@@ -11,6 +12,7 @@ export type Tool =
   | { kind: "select" }
   | { kind: "space"; type: SpaceType }
   | { kind: "door" }
+  | { kind: "route" }
   | { kind: "bulkhead"; bk: "fire_zone" | "watertight" }
   | { kind: "lsa"; lsa: "lifeboat" | "liferaft" }
   | { kind: "stamp"; stamp: StampKind };
@@ -90,12 +92,18 @@ interface State {
   panel: Panel;
   mode: "design" | "test";
   theme: "dark" | "light";
-  view: { isolateDeck: boolean; showHull: boolean; showRoutes: boolean; showWater: boolean; showBulkheads: boolean; showLabels: boolean };
+  view: { isolateDeck: boolean; showHull: boolean; showRoutes: boolean; showWater: boolean; showBulkheads: boolean; showLabels: boolean; showDoors: boolean };
   focusCase: number | null;
   test: TestSettings;
   refMesh: RefMesh | null;
   toast: { text: string; kind: "error" | "info" | "ok"; id: number } | null;
   tourStep: number | null;
+  /** Model ship shown in the picker; switching keeps every model's edits (with undo history) in memory. */
+  modelId: string;
+  drafts: Record<string, { design: Design; past: Design[]; future: Design[]; activeDeckId: string }>;
+  switchModel: (id: string) => void;
+  /** True when any model has edits since the page was opened (used for the leave-page warning). */
+  hasUnsavedEdits: () => boolean;
   assembleAt: number; // time (s) of the last design load: spaces assemble from it
   stampOpts: { cabins: number; cabinLength: number; cabinDepth: number; corridorWidth: number; persons: number; stairWidthMm: number };
   setStampOpts: (p: Partial<State["stampOpts"]>) => void;
@@ -170,12 +178,45 @@ export const useStore = create<State>((set, get) => {
     panel: urlPanel ?? (urlMode === "test" ? "test" : "issues"),
     mode: urlMode ?? "design",
     theme,
-    view: { isolateDeck: true, showHull: true, showRoutes: false, showWater: true, showBulkheads: true, showLabels: false },
+    view: { isolateDeck: true, showHull: true, showRoutes: false, showWater: true, showBulkheads: true, showLabels: false, showDoors: false },
     focusCase: null,
     test: { kind: urlTest ?? "sea", running: true, speedKn: initial.hull.designSpeedKn, waveAmp: 1.5, waveFreq: 0.6, headingDeg: 150, heelSweep: true, heelDeg: 10, floodCase: 0, timeScale: 1, restart: 0 },
     refMesh: null,
     toast: null,
     tourStep: null,
+    modelId: "demo",
+    drafts: {},
+    switchModel: (id) => {
+      const st = get();
+      if (id === st.modelId) return;
+      const m = MODELS.find((x) => x.id === id);
+      if (!m) return;
+      gestureStart = null;
+      const drafts = { ...st.drafts, [st.modelId]: { design: st.design, past: st.past, future: st.future, activeDeckId: st.activeDeckId } };
+      const saved = drafts[id];
+      const design = saved?.design ?? normalizeDesign(m.make());
+      const sorted = [...design.decks].sort((a, b) => a.z - b.z);
+      const deck = saved?.activeDeckId ?? sorted[Math.min(2, sorted.length - 1)]?.id ?? "";
+      set({
+        modelId: id,
+        drafts,
+        design,
+        past: saved?.past ?? [],
+        future: saved?.future ?? [],
+        activeDeckId: deck,
+        selection: null,
+        focusCase: null,
+        tool: { kind: "select" },
+        test: { ...st.test, speedKn: design.hull.designSpeedKn, floodCase: 0 },
+        assembleAt: performance.now() / 1000,
+      });
+      schedule();
+      get().notify(saved ? `${m.label}: your edits are back.` : `${m.label} loaded. Your edits to the other models are kept until you reload the page.`, "info");
+    },
+    hasUnsavedEdits: () => {
+      const st = get();
+      return st.past.length > 0 || Object.entries(st.drafts).some(([k, v]) => k !== st.modelId && v.past.length > 0);
+    },
     assembleAt: typeof performance !== "undefined" ? performance.now() / 1000 : 0,
     stampOpts: { cabins: 6, cabinLength: 4, cabinDepth: 4, corridorWidth: 2, persons: 2, stairWidthMm: 1200 },
     setStampOpts: (p) => set({ stampOpts: { ...get().stampOpts, ...p } }),

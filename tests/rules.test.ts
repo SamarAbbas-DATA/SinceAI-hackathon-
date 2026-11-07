@@ -41,10 +41,19 @@ describe("demo design", () => {
     expect(red[0].detail).toMatch(/dispensation/);
   });
 
-  it("escape routes pass: every space or group has two separate ways out", () => {
+  it("escape routes: every space or group has two separate ways out; only the small rooms beside Stair B have close exits", () => {
     const r = a.rules.find((r) => r.ruleId === "ESCAPE-TWO-EXITS")!;
-    expect(r.findings.map((f) => f.message)).toEqual([]);
-    expect(r.status).toBe("green");
+    expect(r.findings.filter((f) => f.status === "red")).toEqual([]);
+    expect(r.findings.every((f) => /only .* m apart/.test(f.message) && f.targets.some((t) => ["D2-store", "D3-laundry", "D4-pantry"].includes(t)))).toBe(true);
+  });
+
+  it("shows the reference-ship hints from docs/Sources: crowded cabins, low deck and three rooms used as passageways", () => {
+    const r = a.rules.find((r) => r.ruleId === "REFERENCE-SHIPS")!;
+    expect(r.status).toBe("amber");
+    const msgs = r.findings.map((f) => f.message).join(" | ");
+    expect(r.findings.some((f) => f.targets.includes("D4-cabS20") && /5\.3 m2/.test(f.message))).toBe(true);
+    expect(msgs).toMatch(/Deck 5 and Deck 6 are only 2\.30 m apart/);
+    for (const [cab, room] of [["D2 cabin S52", "D2 crew store"], ["D3 cabin S52", "D3 laundry"], ["D4 cabin S52", "D4 pantry"]]) expect(msgs).toContain(`from ${cab} leads through ${room}`);
   });
 
   it("evacuation analysis runs and gives a total below the limit", () => {
@@ -124,11 +133,12 @@ describe("targeted edits change the verdicts", () => {
 
   it("REFERENCE-SHIPS: crowded cabin, low deck and a route through a room give amber hints", () => {
     const d = demoDesign();
-    expect(rule(d, "REFERENCE-SHIPS").status).toBe("green");
+    const before = rule(d, "REFERENCE-SHIPS").findings.length;
     d.spaces.find((s) => s.type === "cabin")!.persons = 4; // 16 m2 / 4 = 4 m2 each
     let r = rule(d, "REFERENCE-SHIPS");
     expect(r.status).toBe("amber");
-    expect(r.findings[0].message).toMatch(/4\.0 m2/);
+    expect(r.findings.length).toBe(before);
+    expect(r.findings[0].message).toMatch(/smallest: .*4\.0 m2/);
     const d2 = demoDesign();
     d2.decks.find((x) => x.id === "D5")!.z = 14; // D4 at 12 m
     r = rule(d2, "REFERENCE-SHIPS");

@@ -9,7 +9,8 @@ import { TestPanel } from "./TestPanel";
 import { TYPE_COLOR, TYPE_LABEL, TYPE_ICON, STATUS_VAR, LSA_COLOR, EXIT_COLOR } from "./theme";
 import { sortedDecks, spaceVertical, centreOutsideHull } from "../engine/vessel";
 import { exportDesign, exportVesselSpec, parseDesign, parseOffsetsCSV, applyOffsets } from "../engine/io";
-import { demoDesign, blankDesign } from "../data/demoDesign";
+import { blankDesign } from "../data/demoDesign";
+import { MODELS } from "../data/ships";
 import { sharedEdges, overlapsWith } from "../engine/topology";
 import { requiredMinutes, RULES } from "../engine/rules";
 import { autoDoors } from "../engine/generators";
@@ -46,6 +47,7 @@ const ICONS = {
   bulkheads: "M8 4v16M16 4v16M4 12h16",
   routes: "M4 18h5v-5h5V8h6M17 5l3 3-3 3",
   names: "M5 7h14M9 7v10M15 12h4M17 12v5",
+  exits: "M4 4h16v16H4zM9 8v9M9 8h3M13 12.5h5M16 10l2 2.5-2 2.5",
   sun: "M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
   moon: "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z",
   download: "M12 4v11M7 10l5 5 5-5M5 20h14",
@@ -135,14 +137,20 @@ export function App() {
   }, [st.theme]);
 
   useEffect(() => {
-    try {
-      if (!localStorage.getItem("ship-precheck-toured")) {
-        localStorage.setItem("ship-precheck-toured", "1");
-        setTimeout(() => useStore.getState().set({ tourStep: 0 }), 1200);
-      }
-    } catch {
-      /* storage unavailable */
-    }
+    // The interactive tour opens every time the app starts; every step has "Skip tour".
+    const t = setTimeout(() => useStore.getState().set({ tourStep: 0 }), 1200);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Edits live in memory (per model); warn only when the page is reloaded or closed.
+  useEffect(() => {
+    const onLeave = (e: BeforeUnloadEvent) => {
+      if (!useStore.getState().hasUnsavedEdits()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
   }, []);
 
   useEffect(() => {
@@ -180,6 +188,7 @@ export function App() {
         r: { kind: "lsa", lsa: "liferaft" },
         b: { kind: "stamp", stamp: "cabin_block" },
         k: { kind: "stamp", stamp: "stair_core" },
+        e: { kind: "route" },
       };
       if (map[k] && s.mode === "design") return s.set({ tool: map[k] });
       if (k === "t") return switchMode(s.mode === "design" ? "test" : "design");
@@ -206,7 +215,7 @@ export function App() {
   const menus: Record<string, { label: string; onClick: () => void; hint?: string; disabled?: boolean; sep?: boolean }[]> = {
     File: [
       { label: "New empty design", onClick: () => confirm("Start a new empty design? You can undo this.") && st.load(blankDesign()) },
-      { label: "Load demo ferry (default)", onClick: () => st.load(demoDesign()) },
+      { label: "Reset this model to its original design", onClick: () => st.load(MODELS.find((m) => m.id === st.modelId)!.make()) },
       {
         label: "Restore last session",
         onClick: () => {
@@ -247,6 +256,7 @@ export function App() {
       { label: "Cabin block", hint: "B", onClick: () => st.set({ tool: { kind: "stamp", stamp: "cabin_block" } }), sep: true },
       { label: "Stair core", hint: "K", onClick: () => st.set({ tool: { kind: "stamp", stamp: "stair_core" } }) },
       { label: "Emergency door", hint: "D", onClick: () => st.set({ tool: { kind: "door" } }), sep: true },
+      { label: "Escape route", hint: "E", onClick: () => st.set({ tool: { kind: "route" } }) },
       { label: "Watertight bulkhead", hint: "W", onClick: () => st.set({ tool: { kind: "bulkhead", bk: "watertight" } }) },
       { label: "Fire zone bulkhead", hint: "Z", onClick: () => st.set({ tool: { kind: "bulkhead", bk: "fire_zone" } }) },
       { label: "Lifeboat", hint: "L", onClick: () => st.set({ tool: { kind: "lsa", lsa: "lifeboat" } }) },
@@ -261,6 +271,7 @@ export function App() {
       { label: `${st.view.isolateDeck ? "Show" : "Hide"} decks above`, onClick: () => st.setView({ isolateDeck: !st.view.isolateDeck }), sep: true },
       { label: `${st.view.showLabels ? "Hide" : "Show"} space names`, onClick: () => st.setView({ showLabels: !st.view.showLabels }) },
       { label: `${st.view.showRoutes ? "Hide" : "Show"} escape routes`, onClick: () => st.setView({ showRoutes: !st.view.showRoutes }) },
+      { label: `${st.view.showDoors ? "Hide" : "Show"} emergency door icons`, onClick: () => st.setView({ showDoors: !st.view.showDoors }) },
     ],
     Analyze: TABS.filter((t) => !t.testOnly && !["guide", "sources"].includes(t.id)).map((t) => ({ label: t.label, onClick: () => st.set({ panel: t.id }) })),
     Test: (["sea", "heel", "flood", "evac"] as TestKind[]).map((k) => ({
@@ -295,7 +306,6 @@ export function App() {
             </button>
           ))}
         </div>
-        <span className="truncate text-[12px] text-faint">{st.design.name}</span>
         <div className="ml-auto flex items-center gap-4 text-[12px]">
           {a && (
             <button data-tour="score" className="flex items-center gap-3 text-muted hover:text-fg" onClick={() => st.set({ panel: "issues" })} title="Open issues">
@@ -345,18 +355,22 @@ export function App() {
           <Viewport />
           <Fragments />
           {!testing && <ToolRail />}
-          <div data-tour="decks" className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-5">
+          <div className="pointer-events-none absolute top-3 right-[284px] left-14 flex justify-center">
+          <div data-tour="decks" className={`pointer-events-auto flex items-center ${decks.length > 8 ? "gap-3" : "gap-5"}`}>
+            {decks.length > 8 && <span className="label mr-1">Deck</span>}
             {[...decks].reverse().map((d, i) => {
               const on = st.activeDeckId === d.id && !testing;
               return (
-                <button key={d.id} className={`anim-rise relative pb-1 text-[12px] transition-colors ${on ? "text-fg" : "text-muted hover:text-fg"}`} style={{ animationDelay: `${i * 40}ms` }} onClick={() => st.set({ activeDeckId: d.id })} title={`z = ${d.z} m`}>
-                  {d.name}
+                <button key={d.id} className={`anim-rise relative pb-1 text-[12px] tabular-nums transition-colors ${on ? "text-fg" : "text-muted hover:text-fg"}`} style={{ animationDelay: `${i * (decks.length > 8 ? 15 : 40)}ms` }} onClick={() => st.set({ activeDeckId: d.id })} title={`${d.name}, z = ${d.z} m`}>
+                  {decks.length > 8 ? d.name.replace(/^Deck\s*/, "") : d.name}
                   {d.id === st.design.bulkheadDeckId && <span className="ml-1 text-[9px] text-faint">BHD</span>}
                   {on && <span className="anim-underline absolute right-0 bottom-0 left-0 h-[1.5px] bg-accent" />}
                 </button>
               );
             })}
           </div>
+          </div>
+          <ModelPicker />
           {!testing && st.tool.kind !== "select" && (
             <div key={JSON.stringify(st.tool)} className="anim-wipe absolute top-11 left-1/2 -translate-x-1/2 text-[11.5px] whitespace-nowrap text-muted">
               {toolHint(st.tool)} <span className="text-faint">Esc to stop</span>
@@ -481,6 +495,8 @@ function toolHint(t: Tool): string {
       return `${TYPE_LABEL[t.type]}: click on the deck to place. A red outline means it would overlap.`;
     case "door":
       return "Emergency door: click near a wall between two rooms. Green preview = it connects them, amber = outer wall.";
+    case "route":
+      return "Escape route: click a room. Missing emergency doors to its corridor or stairwell are added and its way out is drawn in red.";
     case "bulkhead":
       return `${t.bk === "watertight" ? "Watertight" : "Fire zone"} bulkhead: click to place it across the ship.`;
     case "lsa":
@@ -490,6 +506,73 @@ function toolHint(t: Tool): string {
     default:
       return "";
   }
+}
+
+// ------------------------------------------------------------------ model picker (top right of the 3D view)
+function ModelPicker() {
+  const modelId = useStore((s) => s.modelId);
+  const drafts = useStore((s) => s.drafts);
+  const pastLen = useStore((s) => s.past.length);
+  const testing = useStore((s) => s.mode === "test");
+  const switchModel = useStore((s) => s.switchModel);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+  const cur = MODELS.find((m) => m.id === modelId) ?? MODELS[0];
+  const edited = (id: string) => (id === modelId ? pastLen > 0 : (drafts[id]?.past.length ?? 0) > 0);
+  return (
+    <div ref={ref} data-tour="models" className="anim-rise absolute top-2 right-4 z-20">
+      <button
+        onClick={() => setOpen(!open)}
+        disabled={testing}
+        title={testing ? "Switch to Design mode to change the model" : "Choose a model ship"}
+        className={`flex min-w-[230px] items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors ${open ? "border-accent" : "border-line hover:border-muted"} bg-surface/90 backdrop-blur-sm disabled:opacity-60`}
+      >
+        <Icon d={ICONS.logo} size={20} className="shrink-0 text-accent" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-medium text-fg">{cur.label}</span>
+          <span className="block truncate text-[10.5px] text-faint">
+            {cur.note}
+            {edited(cur.id) && <span className="text-accent"> · edited</span>}
+          </span>
+        </span>
+        <svg width="12" height="12" viewBox="0 0 24 24" className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="anim-wipe absolute right-0 mt-1 w-[280px] overflow-hidden rounded-md border border-line bg-surface shadow-[0_18px_40px_-16px_rgba(0,0,0,0.6)]">
+          <div className="label px-3 pt-2.5 pb-1">Model ships</div>
+          {MODELS.map((m) => {
+            const on = m.id === modelId;
+            return (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setOpen(false);
+                  switchModel(m.id);
+                }}
+                className={`relative flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left transition-colors hover:bg-surface-2 ${on ? "text-fg" : "text-muted"}`}
+              >
+                {on && <span className="absolute top-2 bottom-2 left-0 w-[2px] rounded bg-accent" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] text-fg">{m.label}</span>
+                  <span className="block truncate text-[10.5px] text-faint">{m.note}</span>
+                </span>
+                {edited(m.id) && <span className="text-[10px] text-accent">edited</span>}
+              </button>
+            );
+          })}
+          <p className="border-t border-line px-3 py-2 text-[10.5px] leading-snug text-faint">Edits to each model are kept while you switch. They are lost when the page is reloaded.</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ------------------------------------------------------------------ menu bar
@@ -558,6 +641,7 @@ function ToolRail() {
       <ViewToggle k="showWater" label="Waterline" icon={ICONS.water} />
       <ViewToggle k="showBulkheads" label="Bulkheads" icon={ICONS.bulkheads} />
       <ViewToggle k="showRoutes" label="Escape routes" icon={ICONS.routes} />
+      <ViewToggle k="showDoors" label="Emergency door icons" icon={ICONS.exits} />
       <ViewToggle k="showLabels" label="Space names" icon={ICONS.names} />
     </div>
   );
@@ -570,8 +654,8 @@ function HoverTile({ color, show, strong = false, className = "" }: { color: str
       aria-hidden
       className={`pointer-events-none absolute rounded-[7px] transition-all duration-200 ${className}`}
       style={{
-        background: `color-mix(in srgb, ${color} ${strong ? 20 : 14}%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${color} ${strong ? 38 : 26}%, transparent)`,
+        background: `color-mix(in srgb, ${color} ${strong ? 32 : 24}%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} ${strong ? 58 : 44}%, transparent)`,
         opacity: show ? 1 : 0,
         transform: show ? "scale(1)" : "scale(0.85)",
       }}
@@ -599,7 +683,7 @@ function RailButton({ active, label, icon, color, onClick, delay = 0 }: { active
   );
 }
 
-function ViewToggle({ k, label, icon }: { k: "isolateDeck" | "showHull" | "showWater" | "showBulkheads" | "showRoutes" | "showLabels"; label: string; icon: string }) {
+function ViewToggle({ k, label, icon }: { k: "isolateDeck" | "showHull" | "showWater" | "showBulkheads" | "showRoutes" | "showLabels" | "showDoors"; label: string; icon: string }) {
   const on = useStore((s) => s.view[k]);
   const setView = useStore((s) => s.setView);
   const [hover, setHover] = useState(false);
@@ -631,6 +715,7 @@ function Hotbar() {
         <div className="mx-2 mb-4 h-6 w-px self-end bg-line" />
         <Tile delay={330} active={st.tool.kind === "stamp" && st.tool.stamp === "cabin_block"} color={TYPE_COLOR.cabin} icon={ICONS.block} label="Cabin block" hotkey="B" onClick={() => st.set({ tool: { kind: "stamp", stamp: "cabin_block" } })} />
         <Tile delay={355} active={st.tool.kind === "stamp" && st.tool.stamp === "stair_core"} color={TYPE_COLOR.stairwell} icon={ICONS.stairs} label="Stair core" hotkey="K" onClick={() => st.set({ tool: { kind: "stamp", stamp: "stair_core" } })} />
+        <Tile delay={380} active={st.tool.kind === "route"} color={EXIT_COLOR} icon={ICONS.routes} label="Escape route" hotkey="E" onClick={() => st.set({ tool: st.tool.kind === "route" ? { kind: "select" } : { kind: "route" } })} />
       </div>
     </div>
   );

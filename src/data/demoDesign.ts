@@ -33,6 +33,8 @@ export function blankDesign(): Design {
 export function demoDesign(): Design {
   const d = blankDesign();
   d.name = "Demo ferry 120 m";
+  // Open sun deck only 2.3 m above Deck 5: less headroom than on the reference ships (REFERENCE-SHIPS hint).
+  d.decks.push({ id: "D6", name: "Deck 6", z: 17.3 });
   const spaces: Space[] = [];
   const doors: Door[] = [];
   const divisions: Record<string, FireRating> = {};
@@ -96,9 +98,21 @@ export function demoDesign(): Design {
     return { c1, c2, c3 };
   };
   accDeck("D2", true);
+  // Small rooms beside Stair B with a connecting door to the next cabin: that cabin's shortest way out runs
+  // through the room (NOAA SWATH report 2.4.2: rooms should not serve as passageways, REFERENCE-SHIPS hint).
+  // The cabin keeps its own corridor door, moved to the far corner so its two exits stay 5 m apart.
+  const passage = (deckId: string, id: string, name: string, type: Space["type"], x0: number, x1: number, stairX: number, cabX: number, cabDoorX: number, movedTo: number) => {
+    box({ id, name, type, deckId, persons: 0 }, x0, x1, -5, -1);
+    door(deckId, (x0 + x1) / 2, -1, 800); // onto the corridor
+    door(deckId, stairX, -3, 1200); // into Stair B
+    door(deckId, cabX, -4.6, 700); // connecting door to the cabin
+    doors.find((q) => q.deckId === deckId && q.x === cabDoorX && q.y === -1)!.x = movedTo;
+  };
+  passage("D2", "D2-store", "D2 crew store", "store", 56, 58, 58, 56, 54, 52.4);
   accDeck("D3", false);
-  // Deck 4 has a galley between cabins (walls left at A-0 on purpose)
+  passage("D3", "D3-laundry", "D3 laundry", "other", 56, 58, 58, 56, 54, 52.4);
   accDeck("D4", false, { portSkip: [[64, 72]] });
+  passage("D4", "D4-pantry", "D4 pantry", "store", 56, 58, 58, 56, 54, 52.4);
   const galley = box({ id: "galley", name: "Galley", type: "galley", deckId: "D4", persons: 6 }, 64, 72, 1, 5);
   door("D4", 66, 1, 900);
   door("D4", 70, 1, 900);
@@ -136,6 +150,12 @@ export function demoDesign(): Design {
   const removed = new Set(spaces.filter((s) => !d.spaces.includes(s)).map((s) => s.id));
   d.doors = doors.filter((dr) => !(removed.size && ["D2", "D3", "D4"].includes(dr.deckId) && dr.x === 78 && dr.y === 1));
   d.divisions = divisions;
+  // Two family cabins on Deck 4 sleep 3 in 16 m2: below the 7.5 m2 per person on the reference ships (GA 23007).
+  for (const id of ["D4-cabS20", "D4-cabS24"]) {
+    const c = d.spaces.find((s) => s.id === id)!;
+    c.persons = 3;
+    c.name = `${c.name} (family)`;
+  }
 
   d.bulkheads = [
     ...[8, 20, 32, 46, 62, 76, 90, 108].map((x, i) => ({ id: `wt${i + 1}`, kind: "watertight" as const, x, rating: "A-0" as const })),

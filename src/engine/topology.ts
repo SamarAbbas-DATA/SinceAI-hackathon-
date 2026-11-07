@@ -128,8 +128,10 @@ export interface DoorIssue {
 export function connections(design: Design): { conns: Connection[]; doorIssues: DoorIssue[] } {
   const conns: Connection[] = [];
   const doorIssues: DoorIssue[] = [];
+  const onDeck = new Map<string, Space[]>(); // spaces per deck, computed once per call (big designs have many doors)
+  const deckSpaces = (deckId: string) => onDeck.get(deckId) ?? onDeck.set(deckId, spacesOnDeck(design, deckId)).get(deckId)!;
   for (const d of design.doors) {
-    const hits = spacesOnDeck(design, d.deckId).filter((s) => onBoundary(rectOf(s), d.x, d.y));
+    const hits = deckSpaces(d.deckId).filter((s) => onBoundary(rectOf(s), d.x, d.y));
     if (hits.length === 2) conns.push({ id: d.id, a: hits[0].id, b: hits[1].id, deckId: d.deckId, x: d.x, y: d.y, widthMm: d.widthMm, virtual: false });
     else if (hits.length === 1) {
       conns.push({ id: d.id, a: hits[0].id, b: OUTSIDE, deckId: d.deckId, x: d.x, y: d.y, widthMm: d.widthMm, virtual: false });
@@ -271,9 +273,11 @@ export function disjointRoutes(g: Graph, fromId: string, isTarget: (s: Space) =>
   type E = { to: number; cap: number; rev: number; conn?: Connection };
   const adj: E[][] = [];
   const id = new Map<string, number>();
+  const names: string[] = []; // node index -> key (reverse of id)
   const node = (k: string) => {
     if (!id.has(k)) {
       id.set(k, adj.length);
+      names.push(k);
       adj.push([]);
     }
     return id.get(k)!;
@@ -339,7 +343,7 @@ export function disjointRoutes(g: Graph, fromId: string, isTarget: (s: Space) =>
   if (out !== undefined) {
     // an original space->connection edge (cap 1) with residual 0 carries one route
     for (const e of adj[out]) {
-      const k = [...id.entries()].find(([, v]) => v === e.to)?.[0] ?? "";
+      const k = names[e.to] ?? "";
       if (k.startsWith("conn:") && e.cap === 0) {
         const c = g.conns.find((c) => `conn:${c.id}` === k);
         if (c) firstConns.push(c);
@@ -351,7 +355,7 @@ export function disjointRoutes(g: Graph, fromId: string, isTarget: (s: Space) =>
   for (const e of snkIn) {
     const back = adj[e.to][e.rev];
     if (back.cap === 0) {
-      const k = [...id.entries()].find(([, v]) => v === e.to)?.[0] ?? "";
+      const k = names[e.to] ?? "";
       const sid = k.replace(/:out$/, "");
       if (g.space.get(sid)?.type === "stairwell") reachesStair = true;
     }
