@@ -1,7 +1,7 @@
 // Rules engine. Every threshold is read from rules.json (single source of truth).
 // Each finding says what is wrong (message), why it matters (detail) and how to fix it (fix).
 import rulesJson from "../../rules.json";
-import type { Design, Finding, RuleResult, Status, Space } from "./types";
+import type { Design, Finding, RuleResult, RuleRef, Status, Space } from "./types";
 import { pairKey } from "./types";
 import { rectOf, sharedEdges, disjointRoutes, CIRCULATION, GROUPABLE, OUTSIDE, type Graph } from "./topology";
 import type { EvacResult } from "./evacuation";
@@ -52,6 +52,7 @@ function result(id: string, findings: Finding[], summary: string, statusOverride
     assumed: d.status === "assumed",
     assumptionNote: d.assumption_note,
     findings,
+    refs: ruleRefs(id),
   };
 }
 
@@ -776,12 +777,31 @@ export const RULE_FUNCS: Record<string, (ctx: RuleContext) => RuleResult> = {
   "REFERENCE-SHIPS": referenceShips,
 };
 
+type RawRef = { id: string; source: string; clause: string; quote?: string; page?: number; match?: string };
+/** The clauses behind a rule (rules.json "refs"), resolved to their documents. */
+export function ruleRefs(id: string): RuleRef[] {
+  const raw: RawRef[] = ruleDef(id).refs ?? [];
+  return raw.map((x) => {
+    const src = RULES.sources.find((s: { id: string }) => s.id === x.source) as { name: string; short?: string; file?: string; url?: string } | undefined;
+    return { id: x.id, source: x.source, sourceName: src?.name ?? x.source, short: src?.short ?? x.source, clause: x.clause, quote: x.quote, page: x.page, file: src?.file, url: src?.url };
+  });
+}
+/** Picks the clause for a finding: the first ref whose "match" pattern fits the message, else the first ref without one. */
+export function refForFinding(id: string, f: Finding): RuleRef | undefined {
+  const raw: RawRef[] = ruleDef(id).refs ?? [];
+  const refs = ruleRefs(id);
+  const i = raw.findIndex((x) => x.match && new RegExp(x.match, "i").test(f.message));
+  return refs[i >= 0 ? i : Math.max(0, raw.findIndex((x) => !x.match))];
+}
+
 export function runRules(ctx: RuleContext): RuleResult[] {
   return RULES.rules.map((r: { id: string; title: string }) => {
     const fn = RULE_FUNCS[r.id];
     if (!fn) return result(r.id, [], "No check implemented for this rule yet.", "grey");
     try {
-      return fn(ctx);
+      const res = fn(ctx);
+      for (const f of res.findings) f.ref ??= refForFinding(r.id, f);
+      return res;
     } catch (e) {
       return result(r.id, [{ status: "grey", message: `The check could not run: ${(e as Error).message}`, targets: [] }], "Error while running the check.", "grey");
     }

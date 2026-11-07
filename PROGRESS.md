@@ -54,6 +54,14 @@ Done in session 7 (2026-11-07, branch samar-version):
 - Speed: connections() caches spaces per deck and disjointRoutes() uses a reverse-name array instead of scanning its id map (same results). Icon-class analysis about 0.4 s (was 1.2 s); demo faster too.
 - Tests: 84 unit/physics (tests/ships.test.ts new), 23 browser checks.
 
+Done in session 8 (2026-11-07, branch samar-version):
+- Sources on every flag: rules.json has "refs" per rule (document, clause, exact quote, PDF page; "match" picks the clause for a finding by its text) and a short name and local file per source. runRules attaches the clause to each finding (no check logic changed). Issues: "Source" line with Open links under every rule summary (visible when closed), and under every finding the clause, page, quote and "Open p. N" (local PDF opened at that page, or the online source). PDF report prints the source per flag. tests/sources.test.ts checks every finding on every model has a clause and every page points to an existing PDF.
+- "+ Add emergency doors" under every flag that names rooms: autoDoors on each flagged room (undoable), message when nothing can be added.
+- Hull livery for the model ships (src/ui/three/livery.ts): outer shell = hull body to the moulded depth plus one tier per deck as long as its rooms, cut at the active deck when decks above are hidden. Painted canvases per side (text reads correctly on both): Royal Caribbean white with navy crown and anchor near the stern and the ship name at the bow in EB Garamond (closest free match to Galliard); Mein Schiff navy hull, red boot-top, white sweep line and white script logo; window/balcony bands per deck use; lifeboats painted on. Opaque from 0.9 L camera distance, gone below 0.6 L, eased fade; never blocks clicks. Model ships open on their top deck so the whole painted hull shows. Logo files in public/liveries (made from reference_images/logo_reference).
+- Livery fixes: superstructure tiers continue towards the bow with a raked front (0.7 m back per metre of height) and the lower tiers reach the transom, so the ship no longer looks cut off; the wireframe hull and the deck plates cross-fade out while the painted shell is shown (they caused dark wedges); scene fog scales with ship length above 120 m (demo unchanged) and the painted shell is not fogged, so long ships stay bright end to end; tier tops are self-lit.
+- Meyer Turku logo in the header (public/brand/meyer-turku.png, inverted on the dark theme).
+- Browser test prints browser console errors; new checks for livery fade and sources. Tests: 91 unit/physics, 25 browser checks.
+
 ## To-do
 ### Docs and data
 - [ ] Download the USCG stair PDF by hand (see THINGS_TO_ASK.txt)

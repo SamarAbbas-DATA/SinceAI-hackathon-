@@ -228,6 +228,7 @@ const STEPS: { target: string; title: string; text: string; image?: string }[] =
   { target: "viewport", title: "3D view", text: "Drag a space to move it, it snaps to neighbours and never overlaps. Hover to lift a space, double-click to fly to it, scroll to zoom where the mouse points." },
   { target: "tabs", title: "Results", text: "Issues lists every flag with what is wrong and how to fix it. The other tabs show hydrostatics, stability, damage, evacuation and performance." },
   { target: "score", title: "Score", text: "The compliance score updates on every change. Green rules pass, amber are close to a limit, red are broken." },
+  { target: "report", title: "Download the report", text: "Report saves a PDF of the design: every flag with its fix and source page, deck plans with the flagged parts marked, weights, stability, damage cases and evacuation. Also under File > Download PDF report. Early pre-check, not an official approval." },
 ];
 
 export function Tour() {

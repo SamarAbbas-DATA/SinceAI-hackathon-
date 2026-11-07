@@ -242,3 +242,8 @@ input[type="range"]::-moz-range-thumb {
   color: var(--muted);
   font-weight: 500;
 }
+
+/* Meyer Turku logo (dark grey artwork): shown light on the dark theme */
+.dark .brand-logo {
+  filter: invert(1) brightness(0.92);
+}

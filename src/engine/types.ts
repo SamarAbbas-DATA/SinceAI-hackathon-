@@ -151,6 +151,20 @@ export interface Finding {
   targets: string[]; // ids of spaces, doors, bulkheads, decks, lsa
   measured?: string;
   limit?: string;
+  ref?: RuleRef; // the clause of the source document behind this finding (attached by runRules)
+}
+
+/** A clause in a source document: local PDF with page number, or an online page. */
+export interface RuleRef {
+  id: string;
+  source: string; // source id in rules.json
+  sourceName: string;
+  short: string; // short document name for compact labels
+  clause: string;
+  quote?: string; // exact words from the document
+  page?: number; // PDF page (1-based) of the local copy
+  file?: string; // local copy in docs/
+  url?: string; // online copy
 }
 
 export interface RuleResult {
@@ -165,4 +179,5 @@ export interface RuleResult {
   assumed: boolean;
   assumptionNote?: string;
   findings: Finding[];
+  refs: RuleRef[]; // every clause this rule is based on, most important first
 }

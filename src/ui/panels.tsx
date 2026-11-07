@@ -6,7 +6,8 @@ import { STATUS_VAR } from "./theme";
 import { RULES, ruleDef } from "../engine/rules";
 import { motions, HULL_TEMPLATES, sortedDecks } from "../engine/vessel";
 import { gzAt } from "../engine/stability";
-import type { RuleResult, Finding } from "../engine/types";
+import type { RuleResult, Finding, RuleRef, Door } from "../engine/types";
+import { autoDoors } from "../engine/generators";
 import { focusOn } from "./three/Viewport";
 import { spaceVertical } from "../engine/vessel";
 
@@ -92,16 +93,43 @@ export function ScoreRing({ score, size = 52 }: { score: number; size?: number }
   );
 }
 
+/** "Document, clause" without repeating the document when the clause already names it. */
+function refLabel(r: RuleRef): string {
+  const head = r.short.split(/[ (]/)[0];
+  return r.clause.startsWith(head) ? r.clause : `${r.short}, ${r.clause}`;
+}
+
+/** Link to the clause: the local PDF opened at its page, or the online source when we have no copy. */
+export function refHref(ref: RuleRef): string | undefined {
+  if (ref.file) return `/${encodeURI(ref.file)}${ref.page ? `#page=${ref.page}` : ""}`;
+  return ref.url;
+}
+
+function SourceLink({ src: r, label }: { src: RuleRef; label?: string }) {
+  const href = refHref(r);
+  if (!href) return null;
+  return (
+    <a
+      className="whitespace-nowrap text-accent hover:underline"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title={r.file ? `${r.sourceName}${r.page ? `, PDF page ${r.page}` : ""}` : "We have no downloaded copy of this document, so this opens the official web page."}
+    >
+      {label ?? (r.file ? (r.page ? `Open p. ${r.page}` : "Open PDF") : "Open source online")}
+    </a>
+  );
+}
+
 function RuleCard({ r, i }: { r: RuleResult; i: number }) {
   const [open, setOpen] = useState(r.status === "red");
   const def = ruleDef(r.ruleId);
-  const srcs = RULES.sources as { id: string; url?: string; file?: string }[];
-  const doc = Object.entries(DOC_FILES).find(([k]) => r.source.includes(k)) ?? srcs.filter((s) => s.file && r.source.includes(s.id)).map((s) => [s.id, s.file!] as [string, string])[0];
-  // No local copy (paid IMO texts, or an EU web page): link to the online source instead.
-  const online = doc ? undefined : srcs.find((s) => r.source.includes(s.id) && s.url);
+  // one link per document, shown under the summary even when the card is closed
+  const docs = r.refs.filter((x, k) => r.refs.findIndex((y) => y.source === x.source) === k);
   return (
     <section className="anim-rise border-b border-line" style={{ animationDelay: `${80 + i * 45}ms` }}>
-      <button className="group flex w-full items-start gap-3 px-4 py-3 text-left" onClick={() => setOpen(!open)}>
+      <button className="group flex w-full items-start gap-3 px-4 pt-3 pb-1 text-left" onClick={() => setOpen(!open)}>
         <Dot status={r.status} size={7} style={{ marginTop: 5 }} />
         <span className="flex-1">
           <span className="block text-[13px] font-medium text-fg">{r.title}</span>
@@ -112,27 +140,33 @@ function RuleCard({ r, i }: { r: RuleResult; i: number }) {
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
+      {docs.length > 0 && (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pr-4 pb-3 pl-[34px] text-[10.5px] text-faint">
+          <span className="label !text-[9px]">Source</span>
+          {docs.map((x) => (
+            <span key={x.source} className="whitespace-nowrap">
+              {x.short}
+              {x.page ? <span className="tabular-nums"> p. {x.page}</span> : null} <SourceLink src={x} label={x.file ? "Open" : "Online"} />
+            </span>
+          ))}
+        </div>
+      )}
       {open && (
-        <div className="space-y-2 pr-4 pb-4 pl-[34px]">
+        <div className="space-y-2.5 pr-4 pb-4 pl-[34px]">
           {r.findings.map((x, k) => (
             <FindingRow key={k} f={x} i={k} />
           ))}
           <div className="anim-wipe space-y-1 pt-1 text-[11.5px] leading-relaxed" style={{ animationDelay: `${r.findings.length * 40 + 40}ms` }}>
             <p className="text-fg/85">{r.plainMeaning}</p>
             <p className="text-faint">Checked: {def.early_warning}</p>
-            <p className="text-faint">
-              {r.sourceName}, {r.clause}.
-              {doc && (
-                <a className="ml-1 text-accent hover:underline" href={`/${encodeURI(doc[1])}`} target="_blank" rel="noreferrer">
-                  Open PDF
-                </a>
-              )}
-              {online && (
-                <a className="ml-1 text-accent hover:underline" href={online.url} target="_blank" rel="noreferrer" title="We have no downloaded copy of this document, so this opens the official web page.">
-                  Open source online
-                </a>
-              )}
-            </p>
+            <div className="space-y-0.5 text-faint">
+              {r.refs.map((x) => (
+                <p key={x.id}>
+                  {refLabel(x)}
+                  {x.page ? `, PDF page ${x.page}` : ""}. <SourceLink src={x} />
+                </p>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -140,8 +174,29 @@ function RuleCard({ r, i }: { r: RuleResult; i: number }) {
   );
 }
 
+/** Adds emergency doors from the flagged rooms to their neighbouring corridors, stairwells and public spaces. */
+function addDoorsFor(targets: string[]) {
+  const st = useStore.getState();
+  const work = structuredClone(st.design);
+  const ids = targets.filter((id) => work.spaces.some((s) => s.id === id && !NO_DOOR_TYPES.includes(s.type))).slice(0, 40);
+  const added: Door[] = [];
+  for (const id of ids) {
+    const doors = autoDoors(work, id);
+    work.doors.push(...doors);
+    added.push(...doors);
+  }
+  if (!added.length) {
+    st.notify("No emergency door can be added automatically here: the flagged rooms already open onto every neighbouring corridor, stairwell or public space. Place a corridor next to them, or use the Emergency door tool (D).", "info");
+    return;
+  }
+  st.edit((d) => void d.doors.push(...added));
+  st.notify(`Added ${added.length} emergency door${added.length > 1 ? "s" : ""}. Ctrl+Z undoes it.`, "ok");
+}
+const NO_DOOR_TYPES = ["stairwell", "lift", "tank", "void"];
+
 export function FindingRow({ f: x, i = 0 }: { f: Finding; i?: number }) {
   const [open, setOpen] = useState(false);
+  const hasRooms = useStore((s) => x.targets.some((id) => s.design.spaces.some((sp) => sp.id === id && !NO_DOOR_TYPES.includes(sp.type))));
   const focus = () => {
     const st = useStore.getState();
     const d = st.design;
@@ -165,6 +220,7 @@ export function FindingRow({ f: x, i = 0 }: { f: Finding; i?: number }) {
       focusOn(sp.xCentre, sp.yCentre, v.zBase + v.height / 2);
     }
   };
+  const ref = x.ref;
   return (
     <div className="anim-wipe relative pl-3" style={{ animationDelay: `${i * 40}ms` }}>
       <span className="absolute top-[3px] bottom-[3px] left-0 w-[2px] rounded" style={{ background: STATUS_VAR[x.status] }} />
@@ -178,11 +234,26 @@ export function FindingRow({ f: x, i = 0 }: { f: Finding; i?: number }) {
           {x.fix}
         </p>
       )}
-      {x.detail && (
-        <button className="mt-0.5 text-[10.5px] text-faint transition-colors hover:text-muted" onClick={() => setOpen(!open)}>
-          {open ? "Less" : "Why it matters"}
-        </button>
+      {ref && (
+        <div className="mt-1 text-[11px] leading-relaxed text-faint">
+          <span className="label mr-1.5 !text-[9.5px]">Source</span>
+          {refLabel(ref)}
+          {ref.page ? `, p. ${ref.page}` : ""}. <SourceLink src={ref} />
+          {ref.quote && <span className={`mt-0.5 border-l border-line pl-2 italic ${open ? "block" : "line-clamp-2"}`}>&ldquo;{ref.quote}&rdquo;</span>}
+        </div>
       )}
+      <div className="mt-0.5 flex items-center gap-3">
+        {x.detail && (
+          <button className="text-[10.5px] text-faint transition-colors hover:text-muted" onClick={() => setOpen(!open)}>
+            {open ? "Less" : "Why it matters"}
+          </button>
+        )}
+        {hasRooms && (
+          <button className="text-[10.5px] text-faint transition-colors hover:text-accent" onClick={() => addDoorsFor(x.targets)} title="Add emergency doors from these rooms to every neighbouring corridor, stairwell or public space that has none yet">
+            + Add emergency doors
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { gzAt } from "../../engine/stability";
 import type { Design, Space, LSA } from "../../engine/types";
 import { pairKey } from "../../engine/types";
 import { hullGeometry, deckGeometry, sectionGeometry } from "./geometry";
+import { liveryTiers, shellTop, shellGeometry, paintSide } from "./livery";
+import { MODELS } from "../../data/ships";
 import { TYPE_COLOR, STATUS_COLOR, DEFAULT_SIZE, DEFAULT_PERSONS, TYPE_LABEL, LSA_COLOR, EXIT_COLOR } from "../theme";
 
 const SNAP = 0.25;
@@ -79,9 +81,10 @@ export function Viewport() {
 
 function Lights() {
   const p = usePalette();
+  const k = useStore((s) => Math.max(1, s.design.hull.LOA / 120)); // big ships: push the fog out with their size
   return (
     <>
-      <fog attach="fog" args={[p.fog, 140, 520]} />
+      <fog attach="fog" args={[p.fog, 140 * k, 520 * k]} />
       <hemisphereLight args={["#fff8f0", p.dark ? "#1a1a1a" : "#9a958e", p.dark ? 0.95 : 1.15]} />
       <directionalLight position={[80, 140, 90]} intensity={p.dark ? 1.35 : 1.15} color="#fff4e8" />
       <directionalLight position={[-90, 60, -80]} intensity={p.dark ? 0.35 : 0.3} color="#ffffff" />
@@ -177,17 +180,8 @@ function Scene() {
     <>
       <group rotation={[-Math.PI / 2, 0, 0]}>
         <ShipMotion>
-          {view.showHull && (
-            <mesh geometry={hullGeo} renderOrder={1}>
-              <meshStandardMaterial color={p.hull} transparent opacity={p.dark ? 0.1 : 0.14} side={THREE.DoubleSide} depthWrite={false} metalness={0} roughness={0.9} />
-            </mesh>
-          )}
-          {view.showHull && (
-            <lineSegments renderOrder={2}>
-              <edgesGeometry args={[hullGeo, 25]} />
-              <lineBasicMaterial color={p.hullEdge} transparent opacity={0.7} />
-            </lineSegments>
-          )}
+          {view.showHull && <HullWire geo={hullGeo} color={p.hull} edge={p.hullEdge} fill={p.dark ? 0.1 : 0.14} />}
+          {view.showHull && <LiveryShell ship={geomShip} />}
           {decks.map((d) => (
             <DeckPlate key={d.id} ship={geomShip} z={d.z} active={d.id === activeDeckId && !testing} visible={visibleDeckIds.has(d.id)} />
           ))}
@@ -209,6 +203,134 @@ function Scene() {
         {!testing && <Interaction ship={geomShip} />}
       </group>
     </>
+  );
+}
+
+/** Opacity of the painted shell, shared with the wireframe hull so the two cross-fade. */
+const liveryFade = { opacity: 0 };
+
+function HullWire({ geo, color, edge, fill }: { geo: THREE.BufferGeometry; color: string; edge: string; fill: number }) {
+  const meshMat = useRef<THREE.MeshStandardMaterial>(null);
+  const lineMat = useRef<THREE.LineBasicMaterial>(null);
+  const grp = useRef<THREE.Group>(null);
+  useFrame(() => {
+    const k = 1 - liveryFade.opacity;
+    if (meshMat.current) meshMat.current.opacity = fill * k;
+    if (lineMat.current) lineMat.current.opacity = 0.7 * k;
+    if (grp.current) grp.current.visible = k > 0.02;
+  });
+  return (
+    <group ref={grp}>
+      <mesh geometry={geo} renderOrder={1}>
+        <meshStandardMaterial ref={meshMat} color={color} transparent opacity={fill} side={THREE.DoubleSide} depthWrite={false} metalness={0} roughness={0.9} />
+      </mesh>
+      <lineSegments renderOrder={2}>
+        <edgesGeometry args={[geo, 25]} />
+        <lineBasicMaterial ref={lineMat} color={edge} transparent opacity={0.7} />
+      </lineSegments>
+    </group>
+  );
+}
+
+// ------------------------------------------------------------------ hull livery (model ships)
+// Opaque and painted when the camera is far enough to see the whole ship, transparent when zoomed in so
+// the rooms show. Cut at the active deck when decks above are hidden.
+function LiveryShell({ ship }: { ship: ReturnType<typeof createShip> }) {
+  const design = useStore((s) => s.design);
+  const modelId = useStore((s) => s.modelId);
+  const isolate = useStore((s) => s.view.isolateDeck);
+  const mode = useStore((s) => s.mode);
+  const activeDeckId = useStore((s) => s.activeDeckId);
+  const T = useStore((s) => s.analysis?.condition?.T) ?? design.hull.designDraft;
+  const { gl, camera, controls } = useThree();
+  const model = MODELS.find((m) => m.id === modelId);
+  const livery = model?.livery && design.name === model.label ? model.livery : null;
+  const L = design.hull.LOA;
+
+  const tiers = useMemo(() => (livery ? liveryTiers(design, ship) : []), [livery, design, ship]);
+  const zFull = shellTop(design, tiers);
+  const paintKey = livery ? JSON.stringify({ livery, tiers, h: design.hull, T: +T.toFixed(1), lsa: design.lsa, decks: design.decks }) : "";
+  const active = design.decks.find((d) => d.id === activeDeckId);
+  const zCut = isolate && mode === "design" && active ? Math.min(zFull, active.z + deckHeight(design, active.id)) : zFull;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const geo = useMemo(() => (livery ? shellGeometry(ship, design, tiers, zCut, zFull) : null), [paintKey, zCut, ship]);
+  useEffect(
+    () => () => {
+      if (geo) [geo.stbd, geo.port, geo.caps].forEach((g) => g.dispose());
+    },
+    [geo],
+  );
+
+  const mats = useMemo(() => {
+    const m = (color: string) => new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide, depthWrite: false, fog: false });
+    const caps = m("#e4e2dd");
+    caps.emissive.set("#e4e2dd"); // tops and fronts of the tiers: self-lit like the painted sides, never black
+    caps.emissiveIntensity = 0.55;
+    return { stbd: m("#ffffff"), port: m("#ffffff"), caps };
+  }, []);
+  useEffect(() => () => Object.values(mats).forEach((x) => x.dispose()), [mats]);
+
+  // paint both sides (async: logo images and the serif font load first)
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!livery) return;
+    let dead = false;
+    setReady(false);
+    const aniso = gl.capabilities.getMaxAnisotropy();
+    Promise.all([paintSide(design, tiers, livery, zFull, true, T), paintSide(design, tiers, livery, zFull, false, T)]).then(([s, p]) => {
+      if (dead) return;
+      for (const [mat, cv] of [
+        [mats.stbd, s],
+        [mats.port, p],
+      ] as const) {
+        const tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = aniso;
+        mat.map?.dispose();
+        mat.map = tex;
+        mat.emissiveMap = tex; // self-lit share keeps the paint crisp under the dim scene lights
+        mat.emissive.set("#ffffff");
+        mat.emissiveIntensity = 0.7;
+        mat.needsUpdate = true;
+      }
+      setReady(true);
+    });
+    return () => {
+      dead = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paintKey]);
+
+  // fade with zoom: opaque from 0.9 L away, gone below 0.6 L (eased, about half a second)
+  const groupRef = useRef<THREE.Group>(null);
+  const opacity = useRef(0);
+  useFrame((_, dt) => {
+    const grp = groupRef.current;
+    if (!grp) return;
+    const target = (controls as unknown as { target?: THREE.Vector3 } | null)?.target;
+    const dist = target ? camera.position.distanceTo(target) : Infinity;
+    const t = Math.min(1, Math.max(0, (dist - 0.6 * L) / (0.3 * L)));
+    const goal = ready ? t * t * (3 - 2 * t) : 0;
+    opacity.current += (goal - opacity.current) * (1 - Math.exp(-dt * 4));
+    if (Math.abs(goal - opacity.current) < 0.002) opacity.current = goal;
+    const o = opacity.current;
+    liveryFade.opacity = o;
+    if (import.meta.env.DEV) Object.assign(window, { __liveryOpacity: o, __liveryDebug: { ready, dist: Math.round(dist), L } }); // read by the browser test
+    grp.visible = o > 0.01;
+    for (const m of Object.values(mats)) {
+      m.opacity = o;
+      m.depthWrite = o > 0.9; // solid enough: hide the rooms behind it
+    }
+  });
+
+  if (!livery || !geo) return null;
+  const none = () => null;
+  return (
+    <group ref={groupRef} visible={false}>
+      <mesh geometry={geo.stbd} material={mats.stbd} renderOrder={30} raycast={none} />
+      <mesh geometry={geo.port} material={mats.port} renderOrder={30} raycast={none} />
+      <mesh geometry={geo.caps} material={mats.caps} renderOrder={30} raycast={none} />
+    </group>
   );
 }
 
@@ -514,10 +636,20 @@ function EvacDots() {
 function DeckPlate({ ship, z, active, visible }: { ship: ReturnType<typeof createShip>; z: number; active: boolean; visible: boolean }) {
   const geo = useMemo(() => deckGeometry(ship, z), [ship, z]);
   const p = usePalette();
+  const base = active ? 0.95 : 0.4;
+  // deck plates are interior detail: they fade out while the painted hull of a model ship is shown
+  const mesh = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    const m = mesh.current;
+    if (!m) return;
+    const k = 1 - liveryFade.opacity;
+    (m.material as THREE.MeshStandardMaterial).opacity = base * k;
+    m.visible = k > 0.02;
+  });
   if (!visible) return null;
   return (
-    <mesh geometry={geo} position={[0, 0, z]} renderOrder={0}>
-      <meshStandardMaterial color={active ? p.deckActive : p.deck} transparent opacity={active ? 0.95 : 0.4} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={1} />
+    <mesh ref={mesh} geometry={geo} position={[0, 0, z]} renderOrder={0}>
+      <meshStandardMaterial color={active ? p.deckActive : p.deck} transparent opacity={base} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={1} />
     </mesh>
   );
 }

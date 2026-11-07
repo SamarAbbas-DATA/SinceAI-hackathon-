@@ -121,6 +121,8 @@ export async function downloadReport() {
     text(`${i + 1}. ${x.f.message}`, 9.5, { bold: true, indent: 5, gap: 0.4 });
     if (x.f.detail) text(x.f.detail, 8.5, { indent: 5, c: [70, 80, 100], gap: 0.4 });
     if (x.f.fix) text(`Fix: ${x.f.fix}`, 8.5, { indent: 5, c: [2, 100, 170], gap: 0.4 });
+    const ref = x.f.ref;
+    if (ref) text(`Source: ${ref.short}, ${ref.clause}${ref.page ? `, PDF page ${ref.page}` : ref.url ? ` (${ref.url})` : ""}.${ref.quote ? ` "${ref.quote}"` : ""}`, 7.5, { indent: 5, c: [110, 115, 125], gap: 0.4 });
     text(x.rule, 7, { indent: 5, c: [140, 150, 165], gap: 2 });
     if (y - before < 6) y = before + 6;
   });

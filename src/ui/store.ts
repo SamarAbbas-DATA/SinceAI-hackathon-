@@ -196,7 +196,8 @@ export const useStore = create<State>((set, get) => {
       const saved = drafts[id];
       const design = saved?.design ?? normalizeDesign(m.make());
       const sorted = [...design.decks].sort((a, b) => a.z - b.z);
-      const deck = saved?.activeDeckId ?? sorted[Math.min(2, sorted.length - 1)]?.id ?? "";
+      // model ships open on their top deck, so the whole painted hull is visible from the start
+      const deck = saved?.activeDeckId ?? (m.livery ? sorted[sorted.length - 1]?.id : sorted[Math.min(2, sorted.length - 1)]?.id) ?? "";
       set({
         modelId: id,
         drafts,

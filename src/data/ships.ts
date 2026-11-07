@@ -326,16 +326,19 @@ export interface ModelEntry {
   label: string;
   note: string;
   make: () => Design;
+  /** Hull colours and marks shown when zoomed out (src/ui/three/livery.ts). */
+  livery?: { brand: "rci" | "tui"; name: string[] };
 }
 
 export const MODELS: ModelEntry[] = [
   { id: "demo", label: "Demo ferry 120 m", note: "Training ship with deliberate problems", make: demoDesign },
-  { id: "icon", label: "Icon of the Seas", note: "2023, 364.75 m, 20 decks", make: () => build(iconClass("Icon of the Seas", { galleyZones: [2, 5, 8] })) },
-  { id: "star", label: "Star of the Seas", note: "2025, 364.75 m, 20 decks", make: () => build(iconClass("Star of the Seas", { galleyZones: [3, 6, 8] })) },
+  { id: "icon", label: "Icon of the Seas", note: "2023, 364.75 m, 20 decks", livery: { brand: "rci", name: ["ICON", "SEAS"] }, make: () => build(iconClass("Icon of the Seas", { galleyZones: [2, 5, 8] })) },
+  { id: "star", label: "Star of the Seas", note: "2025, 364.75 m, 20 decks", livery: { brand: "rci", name: ["STAR", "SEAS"] }, make: () => build(iconClass("Star of the Seas", { galleyZones: [3, 6, 8] })) },
   {
     id: "legend",
     label: "Legend of the Seas",
     note: "2026, 364.75 m, 20 decks",
+    livery: { brand: "rci", name: ["LEGEND", "SEAS"] },
     make: () =>
       build(
         iconClass("Legend of the Seas", {
@@ -349,7 +352,7 @@ export const MODELS: ModelEntry[] = [
         }),
       ),
   },
-  { id: "ms7", label: "Mein Schiff 7", note: "2024, 315.7 m, 16 decks", make: () => build(MS7) },
+  { id: "ms7", label: "Mein Schiff 7", note: "2024, 315.7 m, 16 decks", livery: { brand: "tui", name: ["Mein Schiff 7"] }, make: () => build(MS7) },
 ];
 
 export { build as buildModelShip, type ShipSpec };

@@ -294,7 +294,8 @@ export function App() {
     <div className="flex h-screen flex-col bg-bg text-fg">
       <header className="flex h-11 items-center gap-4 border-b border-line bg-surface px-4">
         <div className="flex items-center gap-2">
-          <Icon d={ICONS.logo} size={19} className="text-fg" />
+          <img src="/brand/meyer-turku.png" alt="Meyer Turku" className="brand-logo h-[22px] w-auto select-none" draggable={false} />
+          <span className="h-4 w-px bg-line" />
           <span className="text-[13px] font-semibold tracking-tight">Pre-Check</span>
         </div>
         <MenuBar menus={menus} />
@@ -328,7 +329,7 @@ export function App() {
           <button className="text-muted transition-colors hover:text-fg" onClick={() => st.setTheme(st.theme === "dark" ? "light" : "dark")} title={st.theme === "dark" ? "Light theme" : "Dark theme"}>
             <Icon d={st.theme === "dark" ? ICONS.sun : ICONS.moon} size={16} />
           </button>
-          <button className="flex items-center gap-1.5 text-muted transition-colors hover:text-fg" onClick={() => downloadReport()}>
+          <button data-tour="report" className="flex items-center gap-1.5 text-muted transition-colors hover:text-fg" onClick={() => downloadReport()}>
             <Icon d={ICONS.download} size={15} />
             Report
           </button>

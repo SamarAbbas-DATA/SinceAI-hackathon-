@@ -18,61 +18,77 @@
   "sources": [
     {
       "id": "EU-2009-45",
+      "short": "Directive 2009/45/EC",
       "name": "Directive 2009/45/EC (EU free copy, domestic voyages only)",
       "url": "https://eur-lex.europa.eu/eli/dir/2009/45"
     },
     {
       "id": "REG13",
+      "short": "SOLAS II-2 Reg. 13 (UK copy)",
+      "file": "docs/REG13_Means_of_Escape.pdf",
       "name": "SOLAS II-2 Regulation 13 Means of Escape (UK government copy)",
       "url": "https://assets.publishing.service.gov.uk/media/5a80f3c6ed915d74e33fd543/Regulation_13_-_Means_of_Escape.pdf"
     },
     {
       "id": "USCG-SOLAS-01",
+      "short": "USCG PRG SOLAS-01",
+      "file": "docs/USCG_SOLAS-01_Stairs_in_Escape_Paths.pdf",
       "name": "US Coast Guard guideline on stairs in escape paths",
       "url": "https://www.dco.uscg.mil/Portals/9/MSC/PRG/PRG.SOLAS-01.2024.01.22.Curved%20or%20Winding%20Stairs%20in%20Escape%20Paths.pdf"
     },
     {
       "id": "MSC-1-CIRC-1533",
+      "short": "MSC.1/Circ.1533",
+      "file": "docs/MSC.1-Circ.1533_Evacuation_Analysis.pdf",
       "name": "IMO evacuation analysis guidelines",
       "url": "https://www.deutsche-flagge.de/de/redaktion/dokumente/interpretationen/solas/ii-2/msc-1-circ-1533-revised-guidelines-on-evacuation-analysis-for-new-and-existing-passenger-ships.pdf"
     },
     {
       "id": "MSC-429-98",
+      "short": "MSC.429(98)/Rev.2 (MGN 692)",
+      "file": "docs/MSC.429-98_Rev2_Flooding_MGN692_Annex.pdf",
       "name": "Explanatory notes to SOLAS chapter II-1 (flooding)",
       "url": "https://assets.publishing.service.gov.uk/media/65817268ed3c34000d3bfb39/MGN_692_Annex.pdf"
     },
     {
       "id": "ICS-TI-20-07",
+      "short": "ICS TI-20-07",
       "name": "Summary of SOLAS II-1 amendment MSC.421(98), contains the R formula",
       "url": "https://www.ics.org.ir/IFleet/CLDFiles/PUB/e7f16923-45fc-4c90-93e3-a7bddfedd557_ICS%20TI-20-07"
     },
     {
       "id": "SOLAS-III-21",
+      "short": "SOLAS III/21",
       "name": "SOLAS chapter III regulation 21, survival craft for passenger ships (not downloaded; values to be confirmed)",
       "url": "https://www.imo.org/en/About/Conventions/Pages/International-Convention-for-the-Safety-of-Life-at-Sea-(SOLAS),-1974.aspx"
     },
     {
       "id": "IS-CODE-2008",
+      "short": "IS Code 2008",
       "name": "IMO International Code on Intact Stability 2008, Part A 2.2 (not downloaded; values to be confirmed)",
       "url": "https://www.imo.org/en/OurWork/Safety/Pages/Stability.aspx"
     },
     {
       "id": "NOAA-SWATH-1990",
+      "short": "NOAA SWATH report 1990",
       "name": "NOAA / BSM Joint Venture, Conceptual design of a SWATH oceanographic research ship, BSM Report 9001-3 (1990)",
       "file": "docs/Sources/noaa_30507_DS1.pdf"
     },
     {
       "id": "GA-GOSARS",
+      "short": "G.O. Sars GA",
       "name": "General arrangement of the research vessel G.O. Sars, Skipsteknisk drawing 04650 rev H (reference ship)",
       "file": "docs/Sources/04650 Rev.H General Arrangement GO SARS.pdf"
     },
     {
       "id": "GA-23007",
+      "short": "GA 23007",
       "name": "General arrangement 23007-01-101-0110 rev R2-14, research vessel (reference ship)",
       "file": "docs/Sources/23007-01-101-0110-01-R2-14-General-arrangement.pdf"
     },
     {
       "id": "GA-9281",
+      "short": "GA 2017117",
       "name": "General arrangement GA2017117-01, 60 m fishery research vessel for Arctic operation (reference ship)",
       "file": "docs/Sources/9281-ga-plan-2017117-01-model-anynomized.pdf"
     }
@@ -95,6 +111,9 @@
       "status": "from_source",
       "source": "EU-2009-45",
       "clause": "Chapter II-2, definition of main vertical zones",
+      "refs": [
+        {"id": "mvz", "source": "EU-2009-45", "clause": "Directive 2009/45/EC, Annex I, Chapter II-2, Regulation 2 (definitions): main vertical zones"}
+      ],
       "plain_meaning": "The ship is cut into sections by fire-resistant walls. On any deck, a section's average length and width should generally not exceed 40 m.",
       "inputs_needed": ["fire_walls", "decks"],
       "early_warning": "Runs as soon as the first fire walls are placed. Shows each zone's length and width live.",
@@ -110,6 +129,10 @@
       "status": "assumed",
       "source": "EU-2009-45",
       "clause": "Chapter II-2, tables of fire integrity of divisions (real table depends on room categories and sprinklers)",
+      "refs": [
+        {"id": "tables", "source": "EU-2009-45", "clause": "Directive 2009/45/EC, Annex I, Chapter II-2: tables of fire integrity of bulkheads and decks between adjacent spaces"},
+        {"id": "mvz-boundary", "source": "EU-2009-45", "clause": "Directive 2009/45/EC, Annex I, Chapter II-2: main vertical zone boundaries are 'A-60' class divisions", "match": "fire zone|zone boundary"}
+      ],
       "plain_meaning": "A wall between two room types must hold back fire for a minimum number of minutes.",
       "inputs_needed": ["rooms", "walls", "wall_ratings"],
       "early_warning": "Runs when a wall is placed between two rooms. Shows the minimum rating needed straight away.",
@@ -137,6 +160,13 @@
       "status": "from_source",
       "source": "REG13",
       "clause": "Regulation 13, 2.1, 2.2, 3.2.2",
+      "refs": [
+        {"id": "2.1", "source": "REG13", "page": 1, "clause": "Regulation 13, 2.1", "quote": "at least two widely separated and ready means of escape shall be provided from all spaces or groups of spaces."},
+        {"id": "lifts", "source": "REG13", "page": 1, "clause": "Regulation 13, 2.2", "quote": "Lifts shall not be considered as forming one of the means of escape", "match": "lift"},
+        {"id": "dead-end", "source": "REG13", "page": 4, "clause": "Regulation 13, 3.3.4", "quote": "No dead-end corridors having a length of more than 7 m shall be accepted.", "match": "dead end"},
+        {"id": "stairway", "source": "REG13", "page": 2, "clause": "Regulation 13, 3.2.2 and 3.2.4.1", "quote": "Above the bulkhead deck there shall be at least two means of escape from each main vertical zone", "match": "enclosed stairway"},
+        {"id": "separated", "source": "REG13", "page": 1, "clause": "Regulation 13, 2.1 (\"widely separated\"; the 5 m is our working value)", "quote": "at least two widely separated and ready means of escape", "match": "apart"}
+      ],
       "plain_meaning": "Every space needs at least two widely separated escape routes. Lifts do not count.",
       "inputs_needed": ["rooms", "doors", "corridors", "stairs"],
       "early_warning": "Runs as soon as a room has doors. Shows 'only one way out' right away.",
@@ -163,6 +193,14 @@
       "status": "from_source",
       "source": "USCG-SOLAS-01 and REG13",
       "clause": "SOLAS II-2/13.3.2.4.5 referring to the FSS Code chapter 13.2.1.1, 13.2.2.2 and 13.2.2.3 (quoted in USCG PRG SOLAS-01); Regulation 13 3.2.1.2 for the 800 mm dispensation case",
+      "refs": [
+        {"id": "900", "source": "USCG-SOLAS-01", "page": 2, "clause": "FSS Code 13.2.1.1, quoted in USCG PRG SOLAS-01", "quote": "Stairways shall not be less than 900 mm in clear width."},
+        {"id": "800", "source": "REG13", "page": 2, "clause": "Regulation 13, 3.2.1.2 (dispensation case only)", "quote": "stairways shall not be less than 800 mm in clear width with handrails on both sides.", "match": "800|dispensation|handrail"},
+        {"id": "fore-aft", "source": "USCG-SOLAS-01", "page": 2, "clause": "FSS Code 13.2.2.2, quoted in USCG PRG SOLAS-01", "quote": "All stairways sized for more than 90 persons shall be aligned fore and aft.", "match": "fore and aft|fore-aft|athwart|90 persons|across the ship"},
+        {"id": "rise", "source": "USCG-SOLAS-01", "page": 2, "clause": "FSS Code 13.2.2.3, quoted in USCG PRG SOLAS-01", "quote": "Stairways shall not exceed 3.5 m in vertical rise without the provision of a landing and shall not have an angle of inclination greater than 45.", "match": "landing|flight|rise|steep|45|fit|long enough|too narrow for"},
+        {"id": "door", "source": "REG13", "page": 10, "clause": "Regulation 13 guidance G5.1", "quote": "Corridors and doorways providing access to and from stairways or open decks should be of sufficient width to prevent congestion", "match": "emergency doors? into"},
+        {"id": "continuity", "source": "REG13", "page": 3, "clause": "Regulation 13, 3.2.4.5", "quote": "The widths, number and continuity of escapes shall be in accordance with the requirements in the Fire Safety Systems Code.", "match": "no door|top deck|bottom deck|door on|one deck"}
+      ],
       "plain_meaning": "Escape stairs must be at least 900 mm wide (FSS Code). Stairs serving more than 90 people must run fore and aft with no curves. A flight may rise at most 3.5 m before a landing, at no more than 45 degrees. 800 mm is only accepted where a single means of escape has been allowed by dispensation (Reg 13 3.2.1.2).",
       "inputs_needed": ["stairs", "people_per_room"],
       "early_warning": "Runs as soon as a stair is placed. Shows the width against 900 mm and the persons the stair serves.",
@@ -191,6 +229,12 @@
       "status": "from_source",
       "source": "MSC-1-CIRC-1533",
       "clause": "SOLAS II-2/13.3.2.7; MSC.1/Circ.1533 Annex 1 para 5 (performance standard) and Annex 2 with Appendix 1 (simplified method)",
+      "refs": [
+        {"id": "n", "source": "MSC-1-CIRC-1533", "page": 2, "clause": "MSC.1/Circ.1533 Annex 1, 5.1 and 5.2 (performance standard)", "quote": "n = 60 if the ship has no more than three main vertical zones and 80, if the ship has more than three main vertical zones."},
+        {"id": "congestion", "source": "MSC-1-CIRC-1533", "page": 4, "clause": "MSC.1/Circ.1533 Annex 2, .13 congestion points", "quote": "Congestion points are identified as follows: .1 in those spaces where the initial density is equal, or greater than, 3.5 persons/m2 and .2 in those locations where the difference between inlet and outlet calculated flows (FC ) is in more than 1.5 persons p", "match": "Queue|density|crowded"},
+        {"id": "annex2", "source": "MSC-1-CIRC-1533", "page": 3, "clause": "MSC.1/Circ.1533 Annex 2 (simplified evacuation analysis)", "quote": "GUIDELINES FOR A SIMPLIFIED EVACUATION ANALYSIS FOR NEW AND EXISTING PASSENGER SHIPS", "match": "reach an assembly|assembly station"},
+        {"id": "el", "source": "MSC-1-CIRC-1533", "page": 2, "clause": "MSC.1/Circ.1533 Annex 1, 5.5", "quote": "(E+L) should be assumed equal to 30 min.", "match": "E\\+L|launching"}
+      ],
       "plain_meaning": "Evacuation analysis is mandatory for new passenger ships over 36 passengers with keel laid on or after 1 January 2020. Guidelines say to do it early in design. Total duration 1.25(R+T) + 2/3(E+L) must not exceed n.",
       "inputs_needed": ["rooms", "people_per_room", "doors", "corridors", "stairs", "muster_stations"],
       "early_warning": "Grey until rooms, stairs and a muster station exist. Then the simplified Annex 2 calculation runs on every change.",
@@ -222,6 +266,11 @@
       "status": "assumed",
       "source": "MSC-429-98 and ICS-TI-20-07",
       "clause": "SOLAS II-1 regulations 6 and 7",
+      "refs": [
+        {"id": "R", "source": "MSC-429-98", "page": 10, "clause": "SOLAS II-1 Regulation 6, required subdivision index R (MSC.429(98)/Rev.2 explanatory notes)", "quote": "REGULATION 6 REQUIRED SUBDIVISION INDEX R"},
+        {"id": "lost", "source": "MSC-429-98", "page": 13, "clause": "SOLAS II-1 Regulation 7-1, factor p (damage of one or two adjacent zones)", "quote": "the words \"compartment\" and \"group of compartments\" should be understood to mean \"zone\" and \"adjacent", "match": "lost|flood|compartment"},
+        {"id": "perm", "source": "MSC-429-98", "page": 33, "clause": "SOLAS II-1 Regulation 7-3, permeability", "quote": "REGULATION 7-3 PERMEABILITY", "match": "permeab"}
+      ],
       "plain_meaning": "The ship's survival score A must be at least the required score R. A adds up, over damage cases, the chance of that damage times the chance of surviving it. R depends on number of people aboard.",
       "inputs_needed": ["watertight_walls", "decks", "hull", "people_total"],
       "early_warning": "Runs when two watertight walls exist. Shows compartments and their lengths. Full score appears once the hull and bulkhead deck are set.",
@@ -255,6 +304,9 @@
       "status": "assumed",
       "source": "IS-CODE-2008",
       "clause": "IS Code 2008 Part A, 2.2.1 to 2.2.4 (general criteria)",
+      "refs": [
+        {"id": "2.2", "source": "IS-CODE-2008", "clause": "IS Code 2008 Part A, 2.2.1 to 2.2.4 (general intact stability criteria)"}
+      ],
       "plain_meaning": "The righting lever curve (GZ) must give enough area, a large enough maximum at a large enough angle, and a minimum initial GM.",
       "inputs_needed": ["hull", "decks", "rooms", "weights"],
       "early_warning": "Runs as soon as a hull exists. Every change in rooms or loading moves KG and the GZ curve.",
@@ -279,6 +331,9 @@
       "status": "assumed",
       "source": "SOLAS-III-21",
       "clause": "SOLAS III/21.1.1 (passenger ships on international voyages)",
+      "refs": [
+        {"id": "21.1.1", "source": "SOLAS-III-21", "clause": "SOLAS III/21.1.1 (lifeboats each side 50 %, liferafts 25 %)"}
+      ],
       "plain_meaning": "Lifeboats on each side must together carry at least half of everyone on board, and liferafts must carry at least another quarter. They belong on the embarkation deck next to the assembly stations.",
       "inputs_needed": ["lsa", "people_total", "muster_stations"],
       "early_warning": "Grey until the first lifeboat or liferaft is placed. Then capacity per side is compared with the persons on board on every change.",
@@ -299,6 +354,10 @@
       "status": "from_source",
       "source": "NOAA-SWATH-1990",
       "clause": "Section 4.6, Table 8 (design and build margin 160 LT on a 2,350 LT lightship) and section 3.2, Table 1 (service life margin 113 LT on a 2,510 LT lightship), NAVSEA practice",
+      "refs": [
+        {"id": "table8", "source": "NOAA-SWATH-1990", "page": 58, "clause": "NOAA SWATH report, section 4.6 and Table 8 (design and build margin)", "quote": "Light ship and deadweight margins conformed with NAVSEA guidelines and criteria."},
+        {"id": "table1", "source": "NOAA-SWATH-1990", "page": 25, "clause": "NOAA SWATH report, section 3.2 and Table 1 (service life margin)", "quote": "The total deadweight allowance is 980 LT which includes a service life margin of 113 LT.", "match": "service"}
+      ],
       "plain_meaning": "Ships get heavier while they are designed, built and used. Designers keep a weight margin: here about 6.8 % of lightship for design and build, plus 4.5 % for growth in service. The ship should still have freeboard and stability with that extra weight.",
       "inputs_needed": ["hull", "decks", "rooms", "weights"],
       "early_warning": "Runs as soon as the ship floats. Every change in rooms or loading moves the result.",
@@ -320,6 +379,11 @@
       "status": "assumed",
       "source": "GA-23007, GA-GOSARS, GA-9281 and NOAA-SWATH-1990",
       "clause": "Smallest values read from three general arrangement drawings in docs/Sources; NOAA report 2.4.2 for rooms used as passageways",
+      "refs": [
+        {"id": "cabins", "source": "GA-23007", "page": 1, "clause": "General arrangement 23007: 2-person cabins of 15 m2 (7.5 m2 per person)", "match": "m2"},
+        {"id": "decks", "source": "GA-GOSARS", "page": 1, "clause": "G.O. Sars general arrangement: decks at 6.30, 9.10, 11.80, 14.30 m (smallest spacing 2.5 m)", "match": "m apart"},
+        {"id": "passage", "source": "NOAA-SWATH-1990", "page": 17, "clause": "NOAA SWATH report, 2.4.2", "quote": "Labs should be located so that none serve as general passageways.", "match": "leads through|passageway"}
+      ],
       "plain_meaning": "Compares the design with three real research ships: cabins should not be smaller per person than on those ships, decks should not be closer together, and escape routes should not lead through private rooms, work rooms or machinery spaces.",
       "inputs_needed": ["rooms", "people_per_room", "decks", "doors"],
       "early_warning": "Runs on every change. Only gives amber hints; these are good practice, not regulations.",

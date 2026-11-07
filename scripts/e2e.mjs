@@ -19,6 +19,7 @@ for (const f of fs.readdirSync(outDir)) fs.rmSync(path.join(outDir, f));
 const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, "--window-size=1600,900", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "about:blank"], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let results = [];
+const browserErrors = [];
 const check = (name, ok, info = "") => {
   results.push(ok);
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${info ? `  (${info})` : ""}`);
@@ -40,6 +41,8 @@ async function main() {
   const pending = new Map();
   ws.onmessage = (m) => {
     const d = JSON.parse(m.data);
+    if (d.method === "Runtime.exceptionThrown") browserErrors.push(d.params.exceptionDetails?.exception?.description ?? d.params.exceptionDetails?.text);
+    if (d.method === "Runtime.consoleAPICalled" && d.params.type === "error") browserErrors.push(d.params.args.map((a) => a.value ?? a.description).join(" "));
     if (d.id && pending.has(d.id)) {
       pending.get(d.id)(d);
       pending.delete(d.id);
@@ -232,6 +235,20 @@ async function main() {
   const icon = await ev(`({ name: ${S}.design.name, decks: ${S}.design.decks.length, spaces: ${S}.design.spaces.length, errors: ${S}.analysis?.errors.length, red: ${S}.analysis?.rules.filter(r => r.status === 'red').map(r => r.ruleId).join(',') })`);
   check("model picker loads Icon of the Seas (20 decks, only the fire zone width red)", icon.name === "Icon of the Seas" && icon.decks === 20 && icon.errors === 0 && icon.red === "FIRE-ZONE-SIZE", JSON.stringify(icon));
   await shot("model-icon");
+  // hull livery: painted and opaque when zoomed out, transparent when zoomed in
+  await sleep(2500);
+  const far = await ev(`window.__liveryOpacity ?? -1`);
+  await shot("livery-icon");
+  await ev(`(() => { const s = ${S}.design.spaces.find(x => x.type === 'cabin'); window.dispatchEvent(new CustomEvent('viewport:focus', { detail: { x: s.xCentre, y: s.yCentre, z: 30 } })); })()`);
+  await sleep(3500);
+  const near = await ev(`window.__liveryOpacity ?? -1`);
+  check("hull livery is opaque zoomed out and fades when zoomed in", far > 0.9 && near < 0.05, JSON.stringify({ far, near, dbg: await ev(`window.__liveryDebug`) }));
+  await shot("livery-icon-zoomed");
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: 'side' }))`);
+  await sleep(2500);
+  await shot("livery-icon-side");
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: '3d' }))`);
+  await sleep(1500);
   await ev(`${S}.edit(d => { d.spaces.find(s => s.type === 'cabin').name = 'E2E renamed cabin'; })`);
   await pick("Demo ferry");
   const back = await ev(`({ name: ${S}.design.name, spaces: ${S}.design.spaces.length })`);
@@ -240,7 +257,21 @@ async function main() {
   check("switching models keeps each model's edits", back.name.startsWith("Demo") && back.spaces > 100 && kept, JSON.stringify(back));
   check("leaving the page warns about unsaved edits", await ev(`${S}.hasUnsavedEdits()`));
   await shot("model-icon-framed");
+  await pick("Mein Schiff 7");
+  await sleep(2500);
+  await shot("livery-ms7");
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: 'side' }))`);
+  await sleep(2500);
+  await shot("livery-ms7-side");
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: 'bow' }))`);
+  await sleep(2500);
+  await shot("livery-ms7-bow");
+  await ev(`${S}.set({ panel: 'issues' })`);
   await pick("Demo ferry");
+  await ev(`${S}.set({ panel: 'issues' })`);
+  await sleep(800);
+  check("issues show the source document with page and quote", await ev(`document.body.innerText.includes('Open p. ') && document.body.innerText.includes('Source')`));
+  await shot("issues-sources");
   // tour step for the model picker shows its image
   await ev(`${S}.set({ tourStep: 3 })`);
   await sleep(1200);
@@ -261,6 +292,7 @@ main()
   .finally(() => {
     chrome.kill();
     const failed = results.filter((x) => !x).length;
+    if (browserErrors.length) console.log(`\nBrowser console errors (${browserErrors.length}):\n  ${[...new Set(browserErrors)].slice(0, 8).join("\n  ")}`);
     console.log(`\n${results.length - failed} passed, ${failed} failed. Screenshots and PDF in ${outDir}`);
     process.exit(failed ? 1 : 0);
   });
