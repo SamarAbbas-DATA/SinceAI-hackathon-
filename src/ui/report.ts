@@ -4,8 +4,9 @@ import { useStore } from "./store";
 import { deckOutline, sortedDecks, spaceDeckIds } from "../engine/vessel";
 import { gzAt } from "../engine/stability";
 import { ruleDef, RULES } from "../engine/rules";
-import { TYPE_COLOR, STATUS_COLOR, TYPE_LABEL } from "./theme";
+import { TYPE_COLOR, STATUS_COLOR, TYPE_LABEL, RUN_COLOR } from "./theme";
 import type { Finding, Status } from "../engine/types";
+import { isCable } from "../engine/types";
 
 type RGB = [number, number, number];
 const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -77,7 +78,7 @@ export async function downloadReport() {
   const c = a.condition;
   if (c) {
     text(
-      `${d.hull.LOA} x ${d.hull.BOA} x ${d.hull.depth} m (${d.hull.custom?.label ?? d.hull.template} hull). Displacement ${n(c.weights.total.massT, 0)} t, draft ${n(c.T, 2)} m (aft ${n(c.draftAft, 2)} / fwd ${n(c.draftFwd, 2)}), GM ${n(c.GMt, 2)} m incl. free surface ${n(c.FSC, 3)} m, freeboard ${n(c.freeboard, 2)} m. ${d.people.passengers} passengers, ${d.people.crew} crew. ${d.spaces.length} spaces, ${d.doors.length} doors, ${d.bulkheads.length} bulkheads, ${d.lsa.length} survival craft.`,
+      `${d.hull.LOA} x ${d.hull.BOA} x ${d.hull.depth} m (${d.hull.custom?.label ?? d.hull.template} hull). Displacement ${n(c.weights.total.massT, 0)} t, draft ${n(c.T, 2)} m (aft ${n(c.draftAft, 2)} / fwd ${n(c.draftFwd, 2)}), GM ${n(c.GMt, 2)} m incl. free surface ${n(c.FSC, 3)} m, freeboard ${n(c.freeboard, 2)} m. ${d.people.passengers} passengers, ${d.people.crew} crew. ${d.spaces.length} spaces, ${d.doors.length} doors, ${d.bulkheads.length} bulkheads, ${d.lsa.length} survival craft, ${(d.runs ?? []).length} major pipes and cables.`,
       9,
     );
   }
@@ -184,11 +185,24 @@ export async function downloadReport() {
         doc.setFillColor(cc[0], cc[1], cc[2]);
         doc.ellipse(X(l.x), Y(l.y), l.kind === "lifeboat" ? 4 * scale : 0.8 * scale, l.kind === "lifeboat" ? 1.2 * scale : 0.6 * scale, "F");
       }
+      // pipes and cables on this deck (risers as small circles)
+      for (const r of d.runs ?? []) {
+        const cc = hex(a.statusById.get(r.id) === "red" ? STATUS_COLOR.red : RUN_COLOR[r.kind]);
+        doc.setDrawColor(cc[0], cc[1], cc[2]);
+        doc.setFillColor(cc[0], cc[1], cc[2]);
+        doc.setLineWidth(isCable(r.kind) ? 0.22 : 0.55);
+        for (let i = 0; i < r.points.length - 1; i++) {
+          const p = r.points[i],
+            q = r.points[i + 1];
+          if (p.deckId === deck.id && q.deckId === deck.id) doc.line(X(p.x), Y(p.y), X(q.x), Y(q.y));
+          else if (p.deckId === deck.id || q.deckId === deck.id) doc.circle(X(p.x), Y(p.y), 0.45, "F");
+        }
+      }
       y = top + ph + 4;
       void deckZ;
     }
     need(10);
-    text("Legend: fill colour = space type; red / amber outline = flagged; orange dashed = fire zone bulkhead; blue = watertight bulkhead; dark squares = doors; orange ovals = lifeboats.", 7.5, { c: [100, 110, 130] });
+    text("Legend: fill colour = space type; red / amber outline = flagged; orange dashed = fire zone bulkhead; blue = watertight bulkhead; dark squares = doors; orange ovals = lifeboats; lines = pipes (red fire main, green bilge and ballast, brown fuel oil, grey exhaust) and thin cables (yellow HV, violet feeders), dots = risers.", 7.5, { c: [100, 110, 130] });
     const types = [...new Set(d.spaces.map((s) => s.type))];
     text(types.map((t) => TYPE_LABEL[t]).join(", "), 7.5, { c: [100, 110, 130] });
   }

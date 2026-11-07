@@ -30,7 +30,7 @@ describe.each(MODELS.filter((m) => m.id !== "demo"))("model ship $label", (m) =>
   it("has no red flags except the fire zone width of the 48.47 m Icon class (rule limit 40 m)", () => {
     const red = a.rules.filter((r) => r.status === "red").map((r) => r.ruleId);
     expect(red).toEqual(p.BOA > 40 ? ["FIRE-ZONE-SIZE"] : []);
-    for (const id of ["FIRE-WALL-RATING", "ESCAPE-TWO-EXITS", "ESCAPE-STAIR-WIDTH", "FLOOD-SURVIVAL", "INTACT-STABILITY", "LSA-CAPACITY", "WEIGHT-MARGIN", "REFERENCE-SHIPS"])
+    for (const id of ["FIRE-WALL-RATING", "ESCAPE-TWO-EXITS", "ESCAPE-STAIR-WIDTH", "FLOOD-SURVIVAL", "INTACT-STABILITY", "LSA-CAPACITY", "WEIGHT-MARGIN", "REFERENCE-SHIPS", "PIPE-FIRE-MAIN", "PIPE-WATERTIGHT", "PIPE-FUEL-HOT", "CABLE-ROUTING"])
       expect(a.rules.find((r) => r.ruleId === id)!.status, id).toBe("green");
     const fz = a.rules.find((r) => r.ruleId === "FIRE-ZONE-SIZE")!;
     expect(fz.findings.every((f) => /wide/.test(f.message))).toBe(true); // lengths are all within the limit

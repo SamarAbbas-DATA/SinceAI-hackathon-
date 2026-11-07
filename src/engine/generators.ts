@@ -1,7 +1,139 @@
 // Build helpers ("stamps") that create several connected parts at once.
-import type { Design, Space, Door } from "./types";
+import type { Design, Space, Door, Run, RunKind, RunPoint } from "./types";
 import { overlapsWith, sharedEdges, connections, CIRCULATION } from "./topology";
-import { sortedDecks, spaceDeckIds } from "./vessel";
+import { sortedDecks, spaceDeckIds, deckHeight } from "./vessel";
+import { RUN_INFO } from "./systems";
+
+/**
+ * Default major pipes and cables for a design, laid out the way they usually run on a passenger ship
+ * (rough arrangement, not a piping drawing):
+ * - fire main: one main along the corridor of every deck with rooms, fed by a riser from the fire pumps in the engine room;
+ * - bilge and ballast main: along the tank top from the aft peak to the forepeak (the one pipe through the collision bulkhead);
+ * - fuel oil lines: from the two fuel tanks nearest the engine room to the engines;
+ * - exhaust uptakes: from the two largest engine rooms straight up to the funnel above the top deck;
+ * - HV power cable: from the main switchboard in the engine room aft to the propulsion motors;
+ * - switchboard feeders: a riser from the engine room and one feeder along the corridor of every deck with rooms.
+ * `halfBreadth(x, z)` (optional) keeps the ends of the bilge main inside the hull.
+ */
+export function defaultRuns(d: Design, opts: { halfBreadth?: (x: number, z: number) => number } = {}): Run[] {
+  const decks = sortedDecks(d);
+  if (!decks.length || !d.spaces.length) return [];
+  const L = d.hull.LOA;
+  const di = new Map(decks.map((k, i) => [k.id, i]));
+  const rooms = (deckId: string) => d.spaces.filter((s) => s.type !== "tank" && s.type !== "void" && spaceDeckIds(d, s).includes(deckId));
+  const area = (s: Space) => s.length * s.breadth;
+  const ers = d.spaces.filter((s) => s.type === "engine_room").sort((a, b) => (di.get(a.deckId)! - di.get(b.deckId)!) || area(b) - area(a));
+  const er = ers[0];
+  const erDeck = er?.deckId ?? decks[0].id;
+  const erIdx = di.get(erDeck)!;
+  const lowDeck = decks[Math.max(0, erIdx - 1)];
+  const bhdZ = d.decks.find((k) => k.id === d.bulkheadDeckId)?.z ?? d.hull.depth;
+  const wt = d.bulkheads.filter((b) => b.kind === "watertight").map((b) => b.x).sort((a, b) => a - b);
+  const collision = wt.length && wt[wt.length - 1] > 0.7 * L ? wt[wt.length - 1] : null;
+  // service lanes either side of the main corridor centreline
+  const corr = d.spaces.filter((s) => s.type === "corridor").sort((a, b) => b.length - a.length)[0];
+  const cy = corr?.yCentre ?? 0;
+  const lane = (corr ? corr.breadth / 2 : 1) * 0.5;
+  const yFire = +(cy + lane).toFixed(2),
+    yFeed = +(cy - lane).toFixed(2);
+  const xc = er?.xCentre ?? 0.45 * L;
+  const fx = +(xc - 2).toFixed(2),
+    gx = +(xc + 2).toFixed(2),
+    ox = +(xc + 1).toFixed(2);
+  const yIn = er?.yCentre ?? 0; // a spot inside the engine room
+  const served = decks.filter((k) => di.get(k.id)! >= erIdx && rooms(k.id).length);
+  const top = served[served.length - 1] ?? decks[decks.length - 1];
+  const runs: Run[] = [];
+  const add = (id: string, kind: RunKind, name: string, pts: RunPoint[]) => {
+    const p = pts.filter((q, i) => i === 0 || q.x !== pts[i - 1].x || q.y !== pts[i - 1].y || q.deckId !== pts[i - 1].deckId);
+    if (p.length >= 2) runs.push({ id, kind, name, sizeMm: RUN_INFO[kind].sizeMm, points: p.map((q) => ({ x: +q.x.toFixed(2), y: +q.y.toFixed(2), deckId: q.deckId })) });
+  };
+  // horizontal main along one deck: over the rooms, through the riser x, and aft of the collision bulkhead below the bulkhead deck
+  const along = (deckId: string, y: number, through: number): RunPoint[] => {
+    const r = rooms(deckId);
+    let x0 = Math.min(through - 0.5, ...r.map((s) => s.xCentre - s.length / 2)) + 0.5;
+    let x1 = Math.max(through + 0.5, ...r.map((s) => s.xCentre + s.length / 2)) - 0.5;
+    const z = d.decks.find((k) => k.id === deckId)!.z;
+    if (collision !== null && z < bhdZ) x1 = Math.min(x1, collision - 0.5);
+    x0 = Math.max(x0, 0.5);
+    return [
+      { x: x0, y, deckId },
+      { x: x1, y, deckId },
+    ];
+  };
+
+  // fire main
+  if (top) {
+    add("fm-riser", "fire_main", "Fire main riser", [
+      { x: fx, y: yIn, deckId: erDeck },
+      { x: fx, y: yFire, deckId: erDeck },
+      { x: fx, y: yFire, deckId: top.id },
+    ]);
+    for (const k of served) add(`fm-${k.id}`, "fire_main", `Fire main ${k.name}`, along(k.id, yFire, fx));
+  }
+
+  // bilge and ballast main on the tank top
+  {
+    const z = lowDeck.z + deckHeight(d, lowDeck.id) - 0.1; // the deckhead, where the pipe is drawn
+    const hb = (x: number) => (opts.halfBreadth ? opts.halfBreadth(x, z) : Infinity);
+    let x0 = Math.max(0.03 * L, (wt[0] ?? 0.06 * L) - 1.5);
+    let x1 = collision !== null ? collision + 1.5 : 0.92 * L;
+    while (x0 < 0.3 * L && hb(x0) < 1.5) x0 += 0.5;
+    while (x1 > 0.7 * L && hb(x1) < 1.5) x1 -= 0.5;
+    add("bilge-main", "bilge_ballast", "Bilge and ballast main", [
+      { x: x0, y: cy + 0.6, deckId: lowDeck.id },
+      { x: x1, y: cy + 0.6, deckId: lowDeck.id },
+    ]);
+  }
+
+  if (er) {
+    // fuel oil lines from the two fuel tanks nearest the engine room
+    const tanks = d.spaces.filter((s) => s.type === "tank" && s.tank?.content === "fuel").sort((a, b) => Math.abs(a.xCentre - xc) - Math.abs(b.xCentre - xc));
+    const usedX = new Set<number>();
+    let nFuel = 0;
+    for (const t of tanks) {
+      if (nFuel >= 2 || usedX.has(Math.round(t.xCentre))) continue;
+      usedX.add(Math.round(t.xCentre));
+      nFuel++;
+      // along the tank top in line with the engine room, then up into it (never through corridors or stairs)
+      add(`fuel-${nFuel}`, "fuel_oil", `Fuel oil line ${nFuel} (${t.name})`, [
+        { x: t.xCentre, y: t.yCentre, deckId: t.deckId },
+        { x: t.xCentre, y: er.yCentre, deckId: t.deckId },
+        { x: ox, y: er.yCentre, deckId: t.deckId },
+        { x: ox, y: er.yCentre, deckId: erDeck },
+      ]);
+    }
+
+    // exhaust uptakes from the two largest engine rooms on the engine deck
+    const onDeck = ers.filter((s) => s.deckId === erDeck).slice(0, 2);
+    const topDeck = decks[decks.length - 1];
+    onDeck.forEach((s, i) =>
+      add(`exhaust-${i + 1}`, "exhaust", `Exhaust uptake ${i + 1} (${s.name})`, [
+        { x: s.xCentre - s.length / 2 + 0.3 * s.length, y: s.yCentre + 0.25 * s.breadth, deckId: erDeck },
+        { x: s.xCentre - s.length / 2 + 0.3 * s.length, y: s.yCentre + 0.25 * s.breadth, deckId: topDeck.id },
+      ]),
+    );
+
+    // HV cable: main switchboard to the propulsion motors aft (from the aftmost engine room)
+    const src = ers.filter((s) => s.deckId === erDeck).sort((a, b) => a.xCentre - a.length / 2 - (b.xCentre - b.length / 2))[0];
+    const hy = src.yCentre - 0.25 * src.breadth;
+    add("hv-propulsion", "hv_cable", "HV cable to the propulsion motors", [
+      { x: src.xCentre - 1, y: hy, deckId: erDeck },
+      { x: (wt[0] ?? 0.05 * L) + 2, y: hy, deckId: erDeck },
+    ]);
+
+    // switchboard feeders: riser from the engine room, then one feeder along every deck above
+    if (top && top.id !== erDeck) {
+      add("feeder-riser", "feeder_cable", "Feeder cable riser", [
+        { x: gx, y: yIn, deckId: erDeck },
+        { x: gx, y: yFeed, deckId: erDeck },
+        { x: gx, y: yFeed, deckId: top.id },
+      ]);
+      for (const k of served) if (k.id !== erDeck) add(`feeder-${k.id}`, "feeder_cable", `Feeder cable ${k.name}`, along(k.id, yFeed, gx));
+    }
+  }
+  return runs;
+}
 
 let n = 0;
 const uid = (p: string) => `${p}${Date.now().toString(36)}${(n++).toString(36)}`;

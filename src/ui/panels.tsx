@@ -10,6 +10,7 @@ import type { RuleResult, Finding, RuleRef, Door } from "../engine/types";
 import { autoDoors } from "../engine/generators";
 import { focusOn } from "./three/Viewport";
 import { spaceVertical } from "../engine/vessel";
+import { runZ } from "../engine/systems";
 
 export const DOC_FILES: Record<string, string> = {
   "USCG-SOLAS-01": "docs/USCG_SOLAS-01_Stairs_in_Escape_Paths.pdf",
@@ -200,6 +201,14 @@ export function FindingRow({ f: x, i = 0 }: { f: Finding; i?: number }) {
   const focus = () => {
     const st = useStore.getState();
     const d = st.design;
+    // pipes and cables (and other findings about one spot): go to the spot, select the run
+    if (x.at) {
+      const run = (d.runs ?? []).find((r) => x.targets.includes(r.id));
+      st.set({ activeDeckId: x.at.deckId });
+      if (run) useStore.setState({ selection: { kind: "run", id: run.id }, panel: "inspect" });
+      focusOn(x.at.x, x.at.y, runZ(d, x.at.deckId) ?? 0);
+      return;
+    }
     const t = x.targets.find((id) => d.spaces.some((s) => s.id === id) || d.doors.some((q) => q.id === id) || d.bulkheads.some((b) => b.id === id) || d.lsa.some((l) => l.id === id));
     if (!t) {
       const deck = d.decks.find((k) => x.targets.includes(k.id));

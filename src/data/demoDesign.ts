@@ -5,6 +5,7 @@ import type { Design, Space, Door, FireRating } from "../engine/types";
 import { pairKey } from "../engine/types";
 import { sharedEdges } from "../engine/topology";
 import { requiredMinutes } from "../engine/rules";
+import { defaultRuns } from "../engine/generators";
 
 export function blankDesign(): Design {
   return {
@@ -23,6 +24,7 @@ export function blankDesign(): Design {
     doors: [],
     bulkheads: [],
     lsa: [],
+    runs: [],
     divisions: {},
     loading: { lightshipOverride: null, deadweight: { massT: 0, lcg: 60, kg: 3 }, personMassKg: 100 },
     people: { passengers: 0, crew: 0 },
@@ -187,5 +189,20 @@ export function demoDesign(): Design {
     { id: "lr2", kind: "liferaft", deckId: "D5", x: 74, y: 8.6, capacity: 25, massT: 0.2 },
     { id: "lr3", kind: "liferaft", deckId: "D5", x: 84, y: -8.2, capacity: 25, massT: 0.2 },
   ];
+
+  // --- Major pipes and cables (default arrangement), with two deliberate problems for the flags:
+  d.runs = defaultRuns(d);
+  // the Deck 4 feeder takes a short cut over the galley (SOLAS II-1/45.5.3: keep it clear of galleys, CABLE-ROUTING)
+  const f4 = d.runs.find((r) => r.id === "feeder-D4");
+  if (f4) {
+    const [a, b] = [f4.points[0], f4.points[f4.points.length - 1]];
+    f4.points = [a, { x: 63, y: a.y, deckId: "D4" }, { x: 63, y: 3, deckId: "D4" }, { x: 72.5, y: 3, deckId: "D4" }, { x: 72.5, y: a.y, deckId: "D4" }, b];
+  }
+  // the first fuel oil line ends at the engine just under the exhaust uptake (MSC/Circ.647 hot surfaces, PIPE-FUEL-HOT)
+  const fuel = d.runs.find((r) => r.id === "fuel-1");
+  if (fuel) {
+    const last = fuel.points[fuel.points.length - 1];
+    fuel.points.push({ x: last.x, y: 1.2, deckId: last.deckId }, { x: 50.5, y: 1.2, deckId: last.deckId }); // 0.9 m from the uptake
+  }
   return d;
 }

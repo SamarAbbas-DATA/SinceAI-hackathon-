@@ -158,6 +158,10 @@ const METHOD: Record<string, string> = {
   "LSA-CAPACITY": "Sum of lifeboat capacity per side and liferaft capacity compared with persons on board.",
   "WEIGHT-MARGIN": "Margin weight added at the lightship centre of gravity; draft solved again on the vessel.js hull; new freeboard and GM compared with the limits.",
   "REFERENCE-SHIPS": "Cabin floor area per person, deck-to-deck heights and the rooms each escape route passes through, compared with three real research ships.",
+  "PIPE-FIRE-MAIN": "Fire main segments per deck intersected with each fire zone; touching runs joined into groups (3D segment distance), fed when a group reaches an engine room; pump pressure = hydrant pressure + rho g h (static head).",
+  "PIPE-WATERTIGHT": "Every horizontal pipe or cable segment below the bulkhead deck tested for crossing a watertight bulkhead; the forwardmost one is the collision bulkhead.",
+  "PIPE-FUEL-HOT": "Closest distance between the fuel oil and exhaust centrelines in 3D, minus both radii; rooms a fuel line passes through by clipping its segments to the room outlines.",
+  "CABLE-ROUTING": "Cable segments clipped to every room outline on their decks (risers count every deck they pass); clear gap to the exhaust uptakes as for fuel lines.",
 };
 
 export function SourcesPanel() {
@@ -224,7 +228,8 @@ const STEPS: { target: string; title: string; text: string; image?: string }[] =
     image: "/tour/model-ships.svg",
   },
   { target: "hotbar", title: "Build bar", text: "Pick a space type or a stamp here, then click on the deck. Number keys 1 to 9 select spaces. Escape route (E): click a room to connect it and see its way out." },
-  { target: "tools", title: "Tools", text: "Select and move, emergency doors, watertight and fire zone bulkheads, lifeboats and liferafts. The icons below switch views on and off: hull, waterline, bulkheads, escape routes, emergency door icons and space names." },
+  { target: "tools", title: "Tools", text: "Select and move, emergency doors, watertight and fire zone bulkheads, lifeboats and liferafts. The icons below switch views on and off: hull, waterline, bulkheads, pipes, cables, escape routes, emergency door icons and space names." },
+  { target: "systems", title: "Pipes and cables", text: "Pipe (P) and Cable (C) draw the major systems: fire main, bilge and ballast main, fuel oil and exhaust, HV and feeder cables. Click to add points, change deck for a riser, Enter to finish. Select one to drag its bends or extend it from an end. The checks flag fire mains missing in a fire zone, pipes through the collision bulkhead, fuel lines near exhaust and cables through galleys." },
   { target: "viewport", title: "3D view", text: "Drag a space to move it, it snaps to neighbours and never overlaps. Hover to lift a space, double-click to fly to it, scroll to zoom where the mouse points." },
   { target: "tabs", title: "Results", text: "Issues lists every flag with what is wrong and how to fix it. The other tabs show hydrostatics, stability, damage, evacuation and performance." },
   { target: "score", title: "Score", text: "The compliance score updates on every change. Green rules pass, amber are close to a limit, red are broken." },

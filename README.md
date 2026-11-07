@@ -32,7 +32,7 @@ Other commands:
 
 | Command | What it does |
 |---|---|
-| `npm test` | Runs the verification suite (52 unit and physics tests) |
+| `npm test` | Runs the verification suite (106 unit and physics tests) |
 | `npm run e2e` | Browser test with `npm run dev` running: drives the real app in headless Chrome or Edge (placing, overlap refusal, dragging, undo, all four test animations, PDF download). Screenshots and the PDF land in `e2e-output/` |
 | `npm run report` | Prints a full engineering report of the demo ship in the terminal |
 | `npm run report -- my.design.json` | Same report for a design you saved from the app |
@@ -72,6 +72,7 @@ Not supported yet: STEP and IGES (they need a large OpenCascade WebAssembly modu
 | Fire | Main vertical zone size from hull outline per deck; division ratings between room types | our code |
 | Resistance | Holtrop-Mennen calm water resistance and effective power | vessel.js `HullResistance` |
 | Seakeeping | Heave, pitch and roll in regular waves (closed form) | vessel.js `WaveMotion` |
+| Pipes and cables | Fire main per deck and fire zone, connection to the pumps and pump pressure (static head); watertight bulkhead and collision bulkhead penetrations; fuel oil clearance to exhaust; main cables clear of galleys, laundries and machinery casings | our code |
 
 ## How the results were verified
 
@@ -85,7 +86,8 @@ Not supported yet: STEP and IGES (they need a large OpenCascade WebAssembly modu
 - **Rules** (`tests/rules.test.ts`): the demo ship gives the expected flags. Targeted edits flip the verdicts: fixing a wall rating, a 700 mm stair, removing an exit, removing a stair (dead end), a cabin straddling a fire zone bulkhead, and 36 or fewer passengers.
 - **Files** (`tests/io.test.ts`): design JSON round trip is lossless. Exporting to vessel.js format and importing back gives identical hydrostatics.
 - **Features** (`tests/features.test.ts`): slack-tank free-surface correction equals rho·l·b³/12 / displacement; an offsets CSV box gives box hydrostatics; overlap detection; stamps and auto doors; lifeboat capacity; every finding carries a fix.
-- **Browser** (`scripts/e2e.mjs`): 14 checks on the running app, including placing, overlap refusal, drag snap-back, undo, the four test animations and the PDF download.
+- **Pipes and cables** (`tests/systems.test.ts`): segment distances and clipping against hand values, deckhead heights and riser lengths, the default arrangement, and each pipe and cable rule turned red or amber by a targeted edit.
+- **Browser** (`scripts/e2e.mjs`): 32 checks on the running app, including placing, overlap refusal, drag snap-back, undo, the four test animations, the PDF download, drawing and dragging a pipe, and the pipe and cable toggles.
 
 ## Known limits (read before trusting a number)
 

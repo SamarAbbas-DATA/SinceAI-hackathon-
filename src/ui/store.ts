@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Design, Space, SpaceType } from "../engine/types";
+import type { Design, Space, SpaceType, RunKind } from "../engine/types";
 import { normalizeDesign } from "../engine/types";
 import { analyze, type Analysis } from "../engine/analyze";
 import { demoDesign } from "../data/demoDesign";
@@ -15,8 +15,10 @@ export type Tool =
   | { kind: "route" }
   | { kind: "bulkhead"; bk: "fire_zone" | "watertight" }
   | { kind: "lsa"; lsa: "lifeboat" | "liferaft" }
-  | { kind: "stamp"; stamp: StampKind };
-export type Selection = { kind: "space" | "door" | "bulkhead" | "lsa"; id: string } | null;
+  | { kind: "stamp"; stamp: StampKind }
+  /** draw a pipe or cable; with `extend` the clicks continue that run from its last point */
+  | { kind: "run"; run: RunKind; extend?: string; from?: "start" | "end" };
+export type Selection = { kind: "space" | "door" | "bulkhead" | "lsa" | "run"; id: string } | null;
 export type Panel = "test" | "issues" | "inspect" | "design" | "hydro" | "stability" | "damage" | "evac" | "performance" | "guide" | "sources";
 export type TestKind = "sea" | "heel" | "flood" | "evac";
 
@@ -92,7 +94,9 @@ interface State {
   panel: Panel;
   mode: "design" | "test";
   theme: "dark" | "light";
-  view: { isolateDeck: boolean; showHull: boolean; showRoutes: boolean; showWater: boolean; showBulkheads: boolean; showLabels: boolean; showDoors: boolean };
+  view: { isolateDeck: boolean; showHull: boolean; showRoutes: boolean; showWater: boolean; showBulkheads: boolean; showLabels: boolean; showDoors: boolean; showPipes: boolean; showCables: boolean };
+  /** last pipe and cable type picked, so the tool rail buttons reopen with it */
+  runKinds: { pipe: RunKind; cable: RunKind };
   focusCase: number | null;
   test: TestSettings;
   refMesh: RefMesh | null;
@@ -117,7 +121,7 @@ interface State {
   redo: () => void;
   load: (d: Design) => void;
   select: (s: Selection) => void;
-  set: (p: Partial<Pick<State, "activeDeckId" | "tool" | "panel" | "focusCase" | "mode" | "tourStep">>) => void;
+  set: (p: Partial<Pick<State, "activeDeckId" | "tool" | "panel" | "focusCase" | "mode" | "tourStep" | "runKinds">>) => void;
   setView: (p: Partial<State["view"]>) => void;
   setTest: (p: Partial<TestSettings>) => void;
   setTheme: (t: "dark" | "light") => void;
@@ -178,7 +182,8 @@ export const useStore = create<State>((set, get) => {
     panel: urlPanel ?? (urlMode === "test" ? "test" : "issues"),
     mode: urlMode ?? "design",
     theme,
-    view: { isolateDeck: true, showHull: true, showRoutes: false, showWater: true, showBulkheads: true, showLabels: false, showDoors: false },
+    view: { isolateDeck: true, showHull: true, showRoutes: false, showWater: true, showBulkheads: true, showLabels: false, showDoors: false, showPipes: true, showCables: true },
+    runKinds: { pipe: "fire_main", cable: "hv_cable" },
     focusCase: null,
     test: { kind: urlTest ?? "sea", running: true, speedKn: initial.hull.designSpeedKn, waveAmp: 1.5, waveFreq: 0.6, headingDeg: 150, heelSweep: true, heelDeg: 10, floodCase: 0, timeScale: 1, restart: 0 },
     refMesh: null,

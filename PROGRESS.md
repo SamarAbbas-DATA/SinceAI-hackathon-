@@ -62,12 +62,20 @@ Done in session 8 (2026-11-07, branch samar-version):
 - Meyer Turku logo in the header (public/brand/meyer-turku.png, inverted on the dark theme).
 - Browser test prints browser console errors; new checks for livery fade and sources. Tests: 91 unit/physics, 25 browser checks.
 
+Done in session 9 (2026-11-07, branch samar-version):
+- Major pipes and cables. New `Run` type (polyline of points, each under the deckhead of its deck; two points on different decks at the same x, y = riser). Six types: fire main, bilge and ballast main, fuel oil line, exhaust uptake (pipes, ISO 14726 colours) and HV power cable, switchboard feeder cable (thin). Small branch lines (domestic water, sewage, hydraulics, air) left out on purpose.
+- Default arrangement for the demo ferry and every model ship (`defaultRuns`, see THINGS_TO_ASK Q17). The demo keeps two deliberate pipe/cable problems: the Deck 4 feeder detours over the galley (CABLE-ROUTING amber) and fuel oil line 1 ends 0.9 m from the exhaust uptake (PIPE-FUEL-HOT amber). Model ships are green on all four new rules. Demo score is now 64.
+- Four new rules with downloaded sources (docs/): PIPE-FIRE-MAIN (REG10: fire main on every deck and fire zone with rooms, connected to the pumps, pump pressure for the top hydrant), PIPE-WATERTIGHT (SOLAS II-1/13.2 via IACS SDC 8/10/7 and II-1/12 via Gard: penetration count, collision bulkhead one forepeak pipe and no cables, hot pipes), PIPE-FUEL-HOT (MSC/Circ.647: clearance to exhaust, fuel through rooms), CABLE-ROUTING (SOLAS II-1/45.5.3 via IACS UI SC11: galleys, laundries, other engine rooms, exhaust casings). Values not in the documents are in THINGS_TO_ASK Q13 to Q16.
+- UI: Pipe (P) and Cable (C) tools on the tool rail with a type picker; click points under the deckhead (grid snap, straight along x or y, magnet to existing runs, Shift for any angle), change deck for a riser, Enter / second click / Esc finishes, Backspace undoes a point. Select a run to edit name, type and size, drag its bends (risers keep both ends together), extend from either end (or click an end handle). View toggles for pipes and cables (on by default); view toggles now in two columns to make room. Runs draw themselves in after the rooms assemble, lift and brighten on hover with a tooltip, show a crisp status line and map pins when flagged, are cut at the active deck like the rooms, and move with the ship in Test mode. Flags with a spot fly the camera there and select the run. PDF deck plans draw pipes, cables and risers.
+- Tests: 106 unit/physics (tests/systems.test.ts new: segment distances, clipping, deckhead heights, default runs, all four rules flipping), 32 browser checks.
+
 ## To-do
 ### Docs and data
 - [ ] Download the USCG stair PDF by hand (see THINGS_TO_ASK.txt)
 - [ ] Get answers to Q1 to Q9 in THINGS_TO_ASK.txt and update rules.json
 
 ### Next
+0. [ ] Pipe and cable weights in the lightship (kg per metre per type), valves and isolating valves on the fire main
 1. [ ] Resize handles in 3D (now via inspector numbers)
 2. [ ] Rotate spaces by 90 degrees (stairs across the ship)
 3. [ ] Wing (asymmetric) compartments and heel in damage cases

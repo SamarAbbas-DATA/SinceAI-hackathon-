@@ -7,12 +7,14 @@ import { createShip, spaceVertical, spaceDeckIds, sortedDecks, deckHeight, halfB
 import { rectOf, spacesOnDeck, sharedEdges, OUTSIDE, overlapsWith, buildGraph, shortestRoute } from "../../engine/topology";
 import { cabinBlock, stairCore, doorSpot, autoDoors, type DoorSpot } from "../../engine/generators";
 import { gzAt } from "../../engine/stability";
-import type { Design, Space, LSA } from "../../engine/types";
+import type { Design, Space, LSA, RunKind, RunPoint } from "../../engine/types";
+import { RunsView, RunPins, runDrag } from "./runs";
+import { runZ, runSegments, runLength, RUN_INFO } from "../../engine/systems";
 import { pairKey } from "../../engine/types";
 import { hullGeometry, deckGeometry, sectionGeometry } from "./geometry";
 import { liveryTiers, shellTop, shellGeometry, paintSide } from "./livery";
 import { MODELS } from "../../data/ships";
-import { TYPE_COLOR, STATUS_COLOR, DEFAULT_SIZE, DEFAULT_PERSONS, TYPE_LABEL, LSA_COLOR, EXIT_COLOR } from "../theme";
+import { TYPE_COLOR, STATUS_COLOR, DEFAULT_SIZE, DEFAULT_PERSONS, TYPE_LABEL, LSA_COLOR, EXIT_COLOR, RUN_COLOR, runDrawRadius } from "../theme";
 
 const SNAP = 0.25;
 const snap = (v: number, s = SNAP) => Math.round(v / s) * s;
@@ -190,11 +192,13 @@ function Scene() {
           <Doors visibleDeckIds={visibleDeckIds} />
           <FailingWalls visibleDeckIds={visibleDeckIds} />
           <LSAs visibleDeckIds={visibleDeckIds} />
+          <RunsView visibleDeckIds={visibleDeckIds} />
           {(view.showRoutes || (testing && testKind === "evac")) && !(testing && testKind === "evac") && <Routes visibleDeckIds={visibleDeckIds} />}
           {!testing && <FloodCase />}
           {testing && testKind === "flood" && <FloodWater />}
           {testing && testKind === "evac" && <EvacDots />}
           {!testing && <FlagPins />}
+          {!testing && <RunPins />}
           <RefMeshView />
         </ShipMotion>
         {c && !c.overloaded && (testing || view.showWater) && (
@@ -793,7 +797,7 @@ function SpaceBox({ s, onActive, hovered, setHover }: { s: Space; onActive: bool
           <meshStandardMaterial color={s.tank!.content === "fuel" ? "#6b4a2b" : s.tank!.content === "ballast" ? "#4f5f63" : "#7c8f96"} transparent opacity={0.9} roughness={0.9} />
         </mesh>
       )}
-      {((hovered && onActive && tool.kind !== "door") || selected || (showLabels && onActive && !testing)) && (
+      {((hovered && onActive && tool.kind !== "door" && tool.kind !== "run") || selected || (showLabels && onActive && !testing)) && (
         <Html position={[0, 0, h / 2 + 0.5]} center style={{ pointerEvents: "none" }} zIndexRange={[20, 0]}>
           <div className="anim-wipe rounded border border-line bg-surface/95 px-2 py-[3px] text-[11px] whitespace-nowrap text-fg shadow-[0_6px_18px_-8px_rgba(0,0,0,0.5)]">
             {s.name}
@@ -1124,6 +1128,50 @@ function magnet(design: Design, s: Space, x: number, y: number) {
 }
 
 type Ghost = { boxes: { x: number; y: number; l: number; b: number; color: string }[]; ok: boolean } | null;
+type Draft = { kind: RunKind; pts: RunPoint[]; extend?: string; from?: "start" | "end"; base: number };
+
+/** Preview of the pipe or cable being drawn: the points so far, the next leg to the cursor (dashed) and its length. */
+function RunGhost({ design, kind, draft, cursor }: { design: Design; kind: RunKind; draft: Draft | null; cursor: RunPoint | null }) {
+  const color = RUN_COLOR[draft?.kind ?? kind];
+  const r = runDrawRadius(draft?.kind ?? kind, RUN_INFO[draft?.kind ?? kind].sizeMm);
+  const v = (q: RunPoint) => [q.x, q.y, runZ(design, q.deckId) ?? 0] as [number, number, number];
+  const pts = draft?.pts ?? [];
+  const last = pts[pts.length - 1];
+  const next: [number, number, number][] = [];
+  if (last && cursor) {
+    next.push(v(last));
+    if (last.deckId !== cursor.deckId) next.push(v({ ...last, deckId: cursor.deckId }));
+    next.push(v(cursor));
+  }
+  const legLen = last && cursor ? Math.hypot(cursor.x - last.x, cursor.y - last.y) + Math.abs((runZ(design, cursor.deckId) ?? 0) - (runZ(design, last.deckId) ?? 0)) : 0;
+  const total = pts.length > 1 ? runLength(design, { id: "", kind, name: "", sizeMm: 0, points: pts }) : 0;
+  return (
+    <>
+      {pts.length > 1 && <Line points={pts.map(v)} color={color} lineWidth={3.5} depthTest={false} renderOrder={17} />}
+      {next.length > 1 && <Line points={next} color={color} lineWidth={2} dashed dashSize={0.6} gapSize={0.35} depthTest={false} transparent opacity={0.9} renderOrder={17} />}
+      {pts.map((q, i) => (
+        <mesh key={i} position={v(q)} renderOrder={18}>
+          <sphereGeometry args={[Math.max(0.22, r), 12, 8]} />
+          <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.9} />
+        </mesh>
+      ))}
+      {cursor && (
+        <group position={v(cursor)}>
+          <mesh renderOrder={18}>
+            <sphereGeometry args={[Math.max(0.26, r * 1.1), 14, 10]} />
+            <meshBasicMaterial color={color} transparent opacity={0.55} depthTest={false} />
+          </mesh>
+          <Html position={[0, 0, 1.1]} center style={{ pointerEvents: "none" }} zIndexRange={[20, 0]}>
+            <div className="rounded border border-line bg-surface/95 px-1.5 py-[2px] text-[10.5px] whitespace-nowrap text-muted tabular-nums">
+              {last ? `${legLen.toFixed(1)} m` : RUN_INFO[kind].label}
+              {total > 0 && <span className="text-faint">  total {(total + legLen).toFixed(1)} m</span>}
+            </div>
+          </Html>
+        </group>
+      )}
+    </>
+  );
+}
 
 function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
   const design = useStore((s) => s.design);
@@ -1135,12 +1183,50 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
   const [ghost, setGhost] = useState<Ghost>(null);
   const [doorGhost, setDoorGhost] = useState<DoorSpot | null>(null);
   const [bhGhost, setBhGhost] = useState<number | null>(null);
+  // pipe / cable being drawn: points so far (an extension starts with the run's own points, `base` of them)
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const draftRef = useRef<Draft | null>(null);
+  draftRef.current = draft;
+  const [cursor, setCursor] = useState<RunPoint | null>(null);
+  const cursorRef = useRef<RunPoint | null>(null);
   const moveRef = useRef<(p: { x: number; y: number }, shift: boolean) => void>(() => {});
   const clearRef = useRef(() => {});
   clearRef.current = () => {
     setGhost(null);
     setDoorGhost(null);
     setBhGhost(null);
+    setCursor(null);
+    cursorRef.current = null;
+  };
+  const finishRef = useRef(() => {});
+  finishRef.current = () => {
+    const d0 = draftRef.current;
+    draftRef.current = null;
+    setDraft(null);
+    if (!d0) return;
+    const st = useStore.getState();
+    const label = RUN_INFO[d0.kind].label;
+    if (d0.extend) {
+      if (d0.pts.length <= d0.base) return;
+      const pts = d0.from === "start" ? [...d0.pts].reverse() : d0.pts;
+      st.edit((d) => {
+        const t = d.runs.find((r) => r.id === d0.extend);
+        if (t) t.points = pts;
+      });
+      const r = useStore.getState().design.runs.find((x) => x.id === d0.extend);
+      if (r) st.notify(`${r.name} extended: now ${runLength(useStore.getState().design, r).toFixed(1)} m. The checks run again.`, "ok");
+      st.select({ kind: "run", id: d0.extend });
+      if (useStore.getState().tool.kind === "run") st.set({ tool: { kind: "select" } });
+      return;
+    }
+    if (d0.pts.length < 2) return;
+    const id = newId("run");
+    const count = st.design.runs.filter((r) => r.kind === d0.kind).length + 1;
+    const run = { id, kind: d0.kind, name: `${label} ${count}`, sizeMm: RUN_INFO[d0.kind].sizeMm, points: d0.pts };
+    st.edit((d) => void d.runs.push(run));
+    const decks = [...new Set(d0.pts.map((q) => st.design.decks.find((k) => k.id === q.deckId)?.name ?? q.deckId))];
+    st.notify(`${label} added: ${runLength(useStore.getState().design, run).toFixed(1)} m on ${decks.join(", ")}. The checks run again.`, "ok");
+    useStore.setState({ selection: { kind: "run", id } });
   };
 
   // Pointer moves are read at window level and intersected with the deck plane directly, so that
@@ -1155,10 +1241,17 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
       if (!dk || st.mode !== "design") return;
       const r = gl.domElement.getBoundingClientRect();
       const inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-      if (!inside && !drag) return clearRef.current();
+      const rd = runDrag.current;
+      if (!inside && !drag && !rd) return clearRef.current();
       ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -(dk.z + 0.02)), hit)) return;
+      // pipes and cables hang under the deckhead: draw and drag them on that plane, not on the deck floor
+      let pz = dk.z + 0.02;
+      if (rd) {
+        const pt = st.design.runs.find((x) => x.id === rd.id)?.points[rd.idx];
+        pz = (pt && runZ(st.design, pt.deckId)) ?? pz;
+      } else if (st.tool.kind === "run") pz = runZ(st.design, dk.id) ?? pz;
+      if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -pz), hit)) return;
       moveRef.current(toVessel(hit), ev.shiftKey);
     };
     window.addEventListener("pointermove", onWinMove);
@@ -1171,6 +1264,21 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
       if (c) c.enabled = (e as CustomEvent).detail as boolean;
     };
     const up = () => {
+      const rd = runDrag.current;
+      if (rd) {
+        runDrag.current = null;
+        const c = controls as unknown as { enabled: boolean } | null;
+        if (c) c.enabled = true;
+        const st = useStore.getState();
+        st.commit();
+        const run = st.design.runs.find((x) => x.id === rd.id);
+        if (!rd.moved && run && (rd.idx === 0 || rd.idx === run.points.length - 1)) {
+          // clicked an end handle: keep drawing from that end
+          st.set({ tool: { kind: "run", run: run.kind, extend: run.id, from: rd.idx === 0 ? "start" : "end" } });
+          st.notify(`Extending ${run.name}: click to add points, change deck for a riser. Enter or Esc to finish.`, "info");
+        }
+        return;
+      }
       if (!drag) return;
       const st = useStore.getState();
       const s = st.design.spaces.find((x) => x.id === drag!.id);
@@ -1199,7 +1307,51 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
     setGhost(null);
     setDoorGhost(null);
     setBhGhost(null);
+    const d0 = draftRef.current;
+    if (tool.kind === "run" && d0 && !d0.extend && !tool.extend) {
+      // another pipe or cable type picked while drawing: the draft takes the new type
+      if (d0.kind !== tool.run) setDraft({ ...d0, kind: tool.run });
+      return;
+    }
+    if (d0) finishRef.current();
+    if (tool.kind === "run" && tool.extend) {
+      const r = useStore.getState().design.runs.find((x) => x.id === tool.extend);
+      if (r) {
+        const pts = tool.from === "start" ? [...r.points].reverse() : [...r.points];
+        setDraft({ kind: r.kind, pts, extend: r.id, from: tool.from ?? "end", base: pts.length });
+      }
+    }
+    if (tool.kind !== "run") {
+      setCursor(null);
+      cursorRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool]);
+
+  // drawing keys: Enter finishes, Backspace takes back the last point (App leaves these keys to us while drawing)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (useStore.getState().tool.kind !== "run") return;
+      const d0 = draftRef.current;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finishRef.current();
+      } else if ((e.key === "Backspace" || e.key === "Delete") && d0) {
+        e.preventDefault();
+        const pts = d0.pts.slice(0, -1);
+        if (pts.length <= (d0.extend ? d0.base - 1 : 0)) {
+          setDraft(null);
+          if (d0.extend) useStore.getState().set({ tool: { kind: "select" } });
+        } else setDraft({ ...d0, pts });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // closing the page area or unmounting while drawing keeps what was drawn
+  useEffect(() => () => finishRef.current(), []);
 
   if (!deck) return null;
   const L = design.hull.LOA,
@@ -1229,7 +1381,75 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
     return null;
   };
 
+  // cursor for the pipe / cable tool: grid snap, magnet to existing runs on this deck, straight runs along x or y
+  const runCursor = (p: { x: number; y: number }, shift: boolean): RunPoint => {
+    const st = useStore.getState();
+    const dkId = st.activeDeckId;
+    let x = snap(p.x),
+      y = snap(p.y);
+    let best = 0.7,
+      snapped = false;
+    for (const r of st.design.runs)
+      for (const g of runSegments(st.design, r)) {
+        if (!g.deckIds.includes(dkId)) continue;
+        let qx = g.a.x,
+          qy = g.a.y;
+        if (!g.vertical) {
+          const dx = g.b.x - g.a.x,
+            dy = g.b.y - g.a.y;
+          const t = Math.max(0, Math.min(1, ((p.x - g.a.x) * dx + (p.y - g.a.y) * dy) / Math.max(1e-9, dx * dx + dy * dy)));
+          qx = g.a.x + dx * t;
+          qy = g.a.y + dy * t;
+        }
+        const d = Math.hypot(p.x - qx, p.y - qy);
+        if (d < best) ((best = d), (x = qx), (y = qy), (snapped = true));
+      }
+    const d0 = draftRef.current;
+    const last = d0?.pts[d0.pts.length - 1];
+    if (!snapped && !shift && last && last.deckId === dkId) {
+      if (Math.abs(x - last.x) >= Math.abs(y - last.y)) y = last.y;
+      else x = last.x;
+    }
+    return { x: +x.toFixed(2), y: +y.toFixed(2), deckId: dkId };
+  };
+
   moveRef.current = (p, shift) => {
+    const rd = runDrag.current;
+    if (rd) {
+      const st = useStore.getState();
+      const run = st.design.runs.find((x) => x.id === rd.id);
+      const pt = run?.points[rd.idx];
+      if (!run || !pt) return;
+      let x = snap(p.x),
+        y = snap(p.y);
+      if (!shift)
+        for (const j of [rd.idx - 1, rd.idx + 1]) {
+          const q = run.points[j];
+          if (!q || q.deckId !== pt.deckId) continue;
+          if (Math.abs(x - q.x) < 0.6) x = q.x; // keep the neighbouring leg straight
+          if (Math.abs(y - q.y) < 0.6) y = q.y;
+        }
+      if (x === pt.x && y === pt.y) return;
+      rd.moved = true;
+      st.edit((d) => {
+        const t = d.runs.find((q) => q.id === rd.id)!;
+        const o = t.points[rd.idx];
+        // a riser keeps its two ends together
+        for (const j of [rd.idx - 1, rd.idx + 1]) {
+          const q = t.points[j];
+          if (q && q.deckId !== o.deckId && q.x === o.x && q.y === o.y) ((q.x = x), (q.y = y));
+        }
+        o.x = x;
+        o.y = y;
+      }, false);
+      return;
+    }
+    if (tool.kind === "run") {
+      const c = runCursor(p, shift);
+      cursorRef.current = c;
+      setCursor(c);
+      return;
+    }
     if (drag) {
       const st = useStore.getState();
       const s = st.design.spaces.find((x) => x.id === drag!.id);
@@ -1364,6 +1584,23 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
       const id = newId(tool.bk === "watertight" ? "wt" : "mvz");
       st.edit((d) => void d.bulkheads.push({ id, kind: tool.bk, x: snap(p.x, 0.5), rating: tool.bk === "fire_zone" ? "A-60" : "A-0" }));
       st.select({ kind: "bulkhead", id });
+    } else if (tool.kind === "run") {
+      e.stopPropagation();
+      const c = cursorRef.current ?? { x, y, deckId: deck.id };
+      const d0 = draftRef.current;
+      if (!d0) {
+        setDraft({ kind: tool.run, pts: [c], base: 0 });
+        return;
+      }
+      const last = d0.pts[d0.pts.length - 1];
+      if (c.deckId === last.deckId && Math.hypot(c.x - last.x, c.y - last.y) < 0.3) {
+        if (d0.pts.length > 1) finishRef.current(); // a second click on the last point finishes
+        return;
+      }
+      const pts = [...d0.pts];
+      if (last.deckId !== c.deckId) pts.push({ x: last.x, y: last.y, deckId: c.deckId }); // riser to this deck
+      if (Math.hypot(c.x - last.x, c.y - last.y) > 0.01) pts.push(c);
+      setDraft({ ...d0, pts });
     } else if (tool.kind === "lsa") {
       e.stopPropagation();
       const q = lsaPos(p.x, p.y);
@@ -1395,6 +1632,7 @@ function Interaction({ ship }: { ship: ReturnType<typeof createShip> }) {
           <ExitIcon color={doorGhost.b ? EXIT_COLOR : STATUS_COLOR.amber} z={2.6} size={0.032} />
         </group>
       )}
+      {tool.kind === "run" && <RunGhost design={design} kind={tool.run} draft={draft} cursor={cursor} />}
       {bhGhost !== null && (
         <mesh position={[bhGhost, 0, design.hull.depth / 2]}>
           <boxGeometry args={[0.15, B, design.hull.depth]} />

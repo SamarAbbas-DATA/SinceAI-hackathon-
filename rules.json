@@ -91,6 +91,40 @@
       "short": "GA 2017117",
       "name": "General arrangement GA2017117-01, 60 m fishery research vessel for Arctic operation (reference ship)",
       "file": "docs/Sources/9281-ga-plan-2017117-01-model-anynomized.pdf"
+    },
+    {
+      "id": "REG10",
+      "short": "SOLAS II-2 Reg. 10 (UK copy)",
+      "file": "docs/REG10_Fire_Fighting.pdf",
+      "name": "SOLAS II-2 Regulation 10 Fire-fighting: fire pumps, fire mains and hydrants (UK government copy)",
+      "url": "https://assets.publishing.service.gov.uk/media/5a7f91bde5274a2e8ab4cf90/Regulation_10_-_Fire-Fighting.pdf"
+    },
+    {
+      "id": "IACS-SC11",
+      "short": "IACS UI SC11 (SOLAS II-1/45.5.3)",
+      "file": "docs/IACS_SC11_Cable_Routing_II-1_45.pdf",
+      "name": "IACS unified interpretation SC11 of SOLAS II-1/45.5.3: routing of essential and emergency cables clear of high fire risk areas (SSE 11/10/4)",
+      "url": "https://iacs.s3.af-south-1.amazonaws.com/wp-content/uploads/2025/02/07131502/SSE-11-10-4-IACS-unified-interpretation-SC11-of-SOLAS-regulation-II-145.5.3-IACS.pdf"
+    },
+    {
+      "id": "MSC-CIRC-647",
+      "short": "MSC/Circ.647",
+      "file": "docs/MSC_Circ647_Flammable_Leakage.pdf",
+      "name": "IMO MSC/Circ.647 Guidelines to minimize leakages from flammable liquid systems (hot surfaces, spray shields, jacketed fuel pipes)",
+      "url": "https://www.deutsche-flagge.de/de/redaktion/dokumente/interpretationen/solas/ii-1/msc-1-circ-647-guidelines-to-minimize-leakages-from-flammable-liquid-systems.pdf"
+    },
+    {
+      "id": "IACS-SDC8",
+      "short": "IACS SDC 8/10/7 (SOLAS II-1/13)",
+      "file": "docs/IACS_SDC8_Watertight_Penetrations_II-1_13.pdf",
+      "name": "IACS SDC 8/10/7, penetrations in watertight divisions; quotes SOLAS II-1/13.2 on pipes and cables through watertight bulkheads",
+      "url": "https://iacs.s3.af-south-1.amazonaws.com/wp-content/uploads/2022/01/26154810/sdc-8-10-7-penetrations-in-watertight-divisions-pressure-testing-after-a-fire-test-solas-regulatio-iacs.pdf"
+    },
+    {
+      "id": "GARD-COLLISION",
+      "short": "Gard: collision bulkhead valve",
+      "name": "Gard, Collision bulkhead - very important valve (summary of SOLAS II-1/12 on pipes through the collision bulkhead; not downloaded)",
+      "url": "https://gard.no/articles/collision-bulkhead-very-important-valve/"
     }
   ],
 
@@ -399,6 +433,107 @@
       "fail_if": "cabin area per person below 7.5 m2, deck height below 2.5 m, or an escape route passing through a room -> amber",
       "assumption_note": "Reference values from research ships, not passenger ship rules. Ferry and cruise cabins can be smaller. Use them as a sanity check only.",
       "ask_meyer": "Q11"
+    },
+
+    {
+      "id": "PIPE-FIRE-MAIN",
+      "title": "Fire main reaches every fire zone",
+      "status": "from_source",
+      "source": "REG10",
+      "clause": "SOLAS II-2 Regulation 10, 2.1 fire mains and hydrants",
+      "refs": [
+        {"id": "zones", "source": "REG10", "page": 3, "clause": "Regulation 10, 2.1.5.2.1", "quote": "the number and position of hydrants shall be such that the requirements of paragraph 2.1.5.1 may be complied with when all watertight doors and all doors in main vertical zone bulkheads are closed", "match": "no fire main|fire zone"},
+        {"id": "pressure", "source": "REG10", "page": 3, "clause": "Regulation 10, 2.1.6.1 (passenger ships of 4,000 gross tonnage and upwards)", "quote": "4,000 gross tonnage and upwards 0.40 N/mm", "match": "pressure|N/mm2"},
+        {"id": "isolate", "source": "REG10", "page": 2, "clause": "Regulation 10, 2.1.4.1", "quote": "Isolating valves to separate the section of the fire main within the machinery space", "match": "not connected|fire pumps"}
+      ],
+      "plain_meaning": "Sea water for fire hoses and sprinklers comes from the fire pumps through the fire main. Every deck with rooms needs the fire main in every fire zone, so hydrants still work when the fire doors between zones are shut, and the pumps must be strong enough to lift the water to the highest hydrant.",
+      "inputs_needed": ["fire_main_runs", "fire_zone_bulkheads", "rooms", "decks"],
+      "early_warning": "Runs as soon as rooms exist. Shows every deck and fire zone without a fire main, fire main pieces not connected to the pumps, and the pump pressure needed for the highest hydrant.",
+      "test": "For every deck and fire zone with rooms, look for a fire main on that deck inside the zone. Join touching fire main runs; a group is fed when it reaches an engine room (fire pumps). Pump pressure needed = 0.40 N/mm2 + rho g (highest fire main - engine room floor), static head only.",
+      "values": {
+        "min_hydrant_pressure_mpa": 0.40,
+        "pump_pressure_mpa": 1.2,
+        "amber_above_share_of_pump": 0.9,
+        "sea_water_density_t_m3": 1.025,
+        "connect_tolerance_m": 0.6,
+        "served_room_types_excluded": ["tank", "void"]
+      },
+      "fail_if": "a deck and fire zone with rooms has no fire main, or a fire main is not connected to the pumps, or the pressure needed is above the pump pressure -> red; above 90 % of the pump pressure -> amber",
+      "assumption_note": "The 0.40 N/mm2 hydrant pressure is from Regulation 10 (passenger ships of 4,000 GT and upwards). The 1.2 N/mm2 fire pump delivery pressure is our working value; friction losses in the pipes are not counted.",
+      "ask_meyer": "Q13"
+    },
+
+    {
+      "id": "PIPE-WATERTIGHT",
+      "title": "Pipes and cables through watertight bulkheads",
+      "status": "from_source",
+      "source": "IACS-SDC8, GARD-COLLISION",
+      "clause": "SOLAS II-1 Regulation 13.2 (quoted in IACS SDC 8/10/7) and Regulation 12 (collision bulkhead)",
+      "refs": [
+        {"id": "collision", "source": "GARD-COLLISION", "clause": "SOLAS II-1/12: the collision bulkhead may be pierced below the bulkhead deck by not more than one pipe for the fluid in the forepeak tank, with a screw-down valve operated from above the bulkhead deck", "match": "collision"},
+        {"id": "13.2.1", "source": "IACS-SDC8", "page": 1, "clause": "SOLAS II-1 Regulation 13.2.1", "quote": "Where pipes, scuppers, electric cables, etc., are carried through watertight bulkheads, arrangements shall be made to ensure the watertight integrity of the bulkheads."},
+        {"id": "13.2.3", "source": "IACS-SDC8", "page": 2, "clause": "SOLAS II-1 Regulation 13.2.3", "quote": "Lead or other heat sensitive materials shall not be used in systems which penetrate watertight bulkheads", "match": "heat|exhaust"}
+      ],
+      "plain_meaning": "Every pipe or cable through a watertight bulkhead below the bulkhead deck is a possible leak path when the ship is damaged. The collision bulkhead at the bow may only be pierced by one pipe, for the forepeak tank. Hot pipes need heat-proof penetrations.",
+      "inputs_needed": ["runs", "watertight_bulkheads", "bulkhead_deck"],
+      "early_warning": "Runs as soon as pipes or cables cross a watertight bulkhead. Counts the penetrations and flags the collision bulkhead.",
+      "test": "For every run below the bulkhead deck, find where it crosses a watertight bulkhead. Collision bulkhead = forwardmost watertight bulkhead forward of 70 % of the length.",
+      "values": {
+        "collision_min_x_share_of_length": 0.7,
+        "collision_max_pipes": 1,
+        "collision_allowed_kinds": ["bilge_ballast"],
+        "hot_kinds": ["exhaust"]
+      },
+      "fail_if": "a cable or a pipe other than the forepeak (bilge and ballast) pipe through the collision bulkhead, or more than one pipe -> red; a hot pipe through a watertight bulkhead -> amber",
+      "assumption_note": "Regulation 12 is not downloaded (summary from Gard); that the forepeak pipe is the bilge and ballast main is our simplification.",
+      "ask_meyer": "Q14"
+    },
+
+    {
+      "id": "PIPE-FUEL-HOT",
+      "title": "Fuel oil lines clear of hot surfaces and rooms",
+      "status": "assumed",
+      "source": "MSC-CIRC-647",
+      "clause": "IMO MSC/Circ.647 guidelines to minimize leakages from flammable liquid systems (SOLAS II-2/15.2.11, 15.3, 15.4)",
+      "refs": [
+        {"id": "hot", "source": "MSC-CIRC-647", "page": 1, "clause": "MSC/Circ.647, annex 1 (ignition sources)", "quote": "There are many potential ignition sources in a machinery space, the most common being hot surfaces, e.g., exhaust pipes and steam pipes.", "match": "exhaust"},
+        {"id": "spray", "source": "MSC-CIRC-647", "page": 4, "clause": "MSC/Circ.647, appendix on spray shields", "quote": "require oil fuel, lubricating oil and other flammable oil piping to be screened or otherwise suitably protected to avoid as far as practicable oil spray.", "match": "runs through|room"}
+      ],
+      "plain_meaning": "Most engine room fires start when fuel sprays from a leaking joint onto a hot exhaust pipe. Fuel lines should keep well clear of exhaust uptakes, and should not run through cabins, corridors or public rooms where a leak would not be noticed and would endanger people.",
+      "inputs_needed": ["fuel_oil_runs", "exhaust_runs", "rooms"],
+      "early_warning": "Runs as soon as a fuel oil line is drawn. Shows the clear gap to the nearest exhaust and every room the line passes through.",
+      "test": "Clear gap between the outside of each fuel oil line and each exhaust uptake (3D, centreline distance minus both radii). Rooms of the listed types the fuel line passes through.",
+      "values": {
+        "min_clearance_to_exhaust_m": 1.0,
+        "touching_below_m": 0.05,
+        "no_fuel_room_types": ["cabin", "corridor", "public", "muster_station", "galley", "stairwell", "lift"]
+      },
+      "fail_if": "fuel line touching an exhaust -> red; closer than 1.0 m, or through a listed room -> amber",
+      "assumption_note": "The circular gives no distance: 1.0 m is our working value for 'clear of hot surfaces'. Keeping fuel lines out of accommodation is good practice we infer from the leak guidance, not a quoted rule.",
+      "ask_meyer": "Q15"
+    },
+
+    {
+      "id": "CABLE-ROUTING",
+      "title": "Main cables clear of high fire risk areas",
+      "status": "from_source",
+      "source": "IACS-SC11",
+      "clause": "SOLAS II-1 Regulation 45.5.3 (quoted in IACS UI SC11)",
+      "refs": [
+        {"id": "45.5.3", "source": "IACS-SC11", "page": 1, "clause": "SOLAS II-1 Regulation 45.5.3, quoted in IACS UI SC11", "quote": "Cables and wiring servicing essential or emergency power, lighting, internal communications or signals shall so far as practicable be routed clear of galleys, laundries, machinery spaces of category A and their casings and other high fire risk areas"}
+      ],
+      "plain_meaning": "Power cables for essential services must not be lost in the fire they are needed for. Main cables should not run through galleys, laundries or other engine rooms, and should keep clear of the exhaust casings that rise from the engine rooms.",
+      "inputs_needed": ["cable_runs", "rooms", "exhaust_runs"],
+      "early_warning": "Runs as soon as a cable is drawn. Lists every galley, laundry or engine room a cable passes through and every exhaust casing it comes close to.",
+      "test": "Rooms each HV or feeder cable passes through (engine rooms where the cable starts or ends do not count). Clear gap between each cable and each exhaust uptake.",
+      "values": {
+        "high_fire_risk_types": ["galley", "engine_room"],
+        "high_fire_risk_name_pattern": "laundr",
+        "min_clearance_to_exhaust_m": 0.5
+      },
+      "fail_if": "a cable through a galley, laundry or another engine room, or closer than 0.5 m to an exhaust casing -> amber ('so far as practicable')",
+      "assumption_note": "The regulation gives no distance from a casing: 0.5 m is our working value.",
+      "ask_meyer": "Q16"
     }
   ],
 
@@ -411,6 +546,10 @@
     "Q6": "Should the intact stability check follow IS Code 2008 general criteria only, or also the weather criterion and your internal margins?",
     "Q7": "Which survival craft arrangement do you design to (SOLAS III/21.1.1 lifeboats 50 % per side plus 25 % liferafts, or a short international voyage / marine evacuation system arrangement)?",
     "Q10": "Which weight margins do you use in early design (design and build, service life)? We use 6.8 % and 4.5 % of lightship from the NOAA report.",
-    "Q11": "What are your smallest cabin areas per person and deck heights for ferries and cruise ships? We compare with three research vessels (7.5 m2 per person, 2.5 m between decks)."
+    "Q11": "What are your smallest cabin areas per person and deck heights for ferries and cruise ships? We compare with three research vessels (7.5 m2 per person, 2.5 m between decks).",
+    "Q13": "What delivery pressure do your fire pumps have, and do you check the hydrant pressure with friction losses? We use 1.2 N/mm2 at the pump and static head only.",
+    "Q14": "Which pipes do you route through the collision bulkhead below the bulkhead deck? We allow one forepeak pipe (bilge and ballast main) and nothing else.",
+    "Q15": "What clear distance do you keep between fuel oil lines and exhaust pipes, and do you allow fuel lines above accommodation? We use 1.0 m and flag fuel lines through rooms.",
+    "Q16": "Which distance do you keep between main cables and machinery casings, and which spaces do you treat as high fire risk for cable routing? We use 0.5 m and galleys, laundries and engine rooms."
   }
 }

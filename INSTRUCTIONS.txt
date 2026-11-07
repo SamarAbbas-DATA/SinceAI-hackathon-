@@ -36,6 +36,15 @@ TASK: panels, layout, menus, theme, report
   - src/ui/TestPanel.tsx (dials), src/ui/help.tsx (guide, sources, tour), src/ui/report.ts (PDF)
   - src/index.css (theme tokens: bg, surface, surface-2, line, fg, muted, accent)
 
+TASK: pipes and cables (fire main, bilge and ballast, fuel oil, exhaust, HV and feeder cables)
+  - src/engine/systems.ts      run geometry: deckhead height, segments, rooms and bulkheads crossed, clearances
+  - src/engine/generators.ts   defaultRuns (default arrangement for the demo and the model ships)
+  - src/engine/rules.ts        PIPE-FIRE-MAIN, PIPE-WATERTIGHT, PIPE-FUEL-HOT, CABLE-ROUTING
+  - src/ui/three/runs.tsx      3D tubes, draw-in animation, hover, handles, pins; drawing is in Viewport Interaction
+  - docs/REG10_Fire_Fighting.pdf, docs/IACS_SC11_Cable_Routing_II-1_45.pdf, docs/MSC_Circ647_Flammable_Leakage.pdf,
+    docs/IACS_SDC8_Watertight_Penetrations_II-1_13.pdf
+  - tests/systems.test.ts, scripts/check-systems.ts (prints the four checks for every model ship)
+
 TASK: file import / export
   - src/engine/io.ts (design JSON, vessel.js JSON, offsets CSV), src/ui/App.tsx loadMesh (STL/OBJ/glTF)
   - tests/io.test.ts, tests/features.test.ts

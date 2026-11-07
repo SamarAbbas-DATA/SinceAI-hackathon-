@@ -1,8 +1,9 @@
 // Rules engine. Every threshold is read from rules.json (single source of truth).
 // Each finding says what is wrong (message), why it matters (detail) and how to fix it (fix).
 import rulesJson from "../../rules.json";
-import type { Design, Finding, RuleResult, RuleRef, Status, Space } from "./types";
-import { pairKey } from "./types";
+import type { Design, Finding, RuleResult, RuleRef, Status, Space, Run, RunPoint } from "./types";
+import { pairKey, isCable } from "./types";
+import { RUN_INFO, runSegments, runZ, spacesCrossed, watertightCrossings, runClearance, connectedGroups, terminalEngineRooms, runsOf, cables as cablesOf, inRect } from "./systems";
 import { rectOf, sharedEdges, disjointRoutes, CIRCULATION, GROUPABLE, OUTSIDE, type Graph } from "./topology";
 import type { EvacResult } from "./evacuation";
 import { FS_MAX } from "./evacuation";
@@ -764,7 +765,272 @@ export function referenceShips(ctx: RuleContext): RuleResult {
   );
 }
 
+// ------------------------------------------------------------------ pipes and cables
+const deckNameOf = (design: Design, id: string) => design.decks.find((d) => d.id === id)?.name ?? id;
+const names = (xs: string[], max = 3) => (xs.length <= max ? xs.join(", ") : `${xs.slice(0, max).join(", ")} and ${xs.length - max} more`);
+
+// ------------------------------------------------------------------ PIPE-FIRE-MAIN
+export function pipeFireMain(ctx: RuleContext): RuleResult {
+  const v = ruleDef("PIPE-FIRE-MAIN").values;
+  const { design } = ctx;
+  const decks = sortedDecks(design);
+  const excluded: string[] = v.served_room_types_excluded;
+  const served = (deckId: string) => design.spaces.filter((s) => !excluded.includes(s.type) && spaceDeckIds(design, s).includes(deckId));
+  if (!design.spaces.some((s) => !excluded.includes(s.type))) return result("PIPE-FIRE-MAIN", [], "No rooms yet, so no fire main is needed yet.", "grey");
+  const mains = runsOf(design, (r) => r.kind === "fire_main");
+  const findings: Finding[] = [];
+  if (!mains.length) {
+    findings.push({
+      status: "red",
+      message: "The ship has no fire main yet.",
+      detail: "Without a fire main the hydrants and sprinklers get no water from the fire pumps.",
+      fix: "Pick the Pipe tool (P) on the left, choose Fire main and draw it along the corridor of every deck with rooms, with a riser down to the engine room.",
+      targets: [],
+    });
+    return result("PIPE-FIRE-MAIN", findings, "No fire main yet.");
+  }
+  // 1. every deck and fire zone with rooms has a fire main on that deck inside the zone
+  const fz = design.bulkheads.filter((b) => b.kind === "fire_zone").map((b) => b.x).sort((a, b) => a - b);
+  const edges = [-Infinity, ...fz, Infinity];
+  const segs = mains.flatMap((r) => runSegments(design, r).filter((g) => !g.vertical).map((g) => ({ r, g })));
+  for (const dk of decks) {
+    const rooms = served(dk.id);
+    if (!rooms.length) continue;
+    const missing: { k: number; x0: number; x1: number }[] = [];
+    for (let k = 0; k < edges.length - 1; k++) {
+      const inZone = rooms.filter((s) => s.xCentre > edges[k] && s.xCentre < edges[k + 1]);
+      if (!inZone.length) continue;
+      const lo = Math.max(edges[k], Math.min(...inZone.map((s) => s.xCentre - s.length / 2)));
+      const hi = Math.min(edges[k + 1], Math.max(...inZone.map((s) => s.xCentre + s.length / 2)));
+      const covered = segs.some(({ g }) => g.deckId === dk.id && Math.min(Math.max(g.a.x, g.b.x), hi) - Math.max(Math.min(g.a.x, g.b.x), lo) > 0.5);
+      if (!covered) missing.push({ k, x0: lo, x1: hi });
+    }
+    if (!missing.length) continue;
+    const zoneTxt = missing.map((m) => `zone ${m.k + 1} (x ${fmt(m.x0, 0)} to ${fmt(m.x1, 0)} m)`);
+    const m0 = missing[0];
+    findings.push({
+      status: "red",
+      message: `${dk.name} has no fire main in fire ${missing.length === 1 ? "" : "zones "}${missing.length === 1 ? zoneTxt[0] : zoneTxt.join(", ")}.`,
+      detail: `Rooms there have no hydrant water. The hydrants must still reach every part of the deck when all doors in the main vertical zone bulkheads are closed, so each zone needs the fire main on its own deck.`,
+      fix: `Draw a fire main (Pipe tool, Fire main) along the corridor of ${dk.name} from x ${fmt(m0.x0, 0)} to ${fmt(m0.x1, 0)} m and let it touch the fire main riser.`,
+      targets: [dk.id],
+      at: { x: (m0.x0 + m0.x1) / 2, y: 0, deckId: dk.id },
+    });
+  }
+  // 2. every piece of fire main is connected to the pumps (an engine room)
+  const fed = (r: Run) => terminalEngineRooms(design, r).size > 0 || spacesCrossed(design, r).some((c) => c.space.type === "engine_room");
+  const groups = connectedGroups(design, mains, v.connect_tolerance_m);
+  const pumped = groups.filter((g) => g.some(fed));
+  for (const g of groups) {
+    if (pumped.includes(g)) continue;
+    const r0 = g[0];
+    findings.push({
+      status: "red",
+      message: `${names(g.map((r) => r.name))} ${g.length === 1 ? "is" : "are"} not connected to the fire pumps.`,
+      detail: `A fire main must be fed from the fire pumps in the machinery space (with isolating valves outside it). This piece does not touch any other fire main that reaches an engine room (gap more than ${v.connect_tolerance_m} m).`,
+      fix: `Extend ${r0.name} until it meets the fire main riser or another connected fire main, or draw a riser from it down to the engine room.`,
+      targets: g.map((r) => r.id),
+      at: r0.points[0],
+    });
+  }
+  // 3. pump pressure needed for the highest hydrant (static head only)
+  const fedRuns = pumped.flat();
+  const erFloors = design.spaces.filter((s) => s.type === "engine_room").map((s) => design.decks.find((d) => d.id === s.deckId)?.z ?? 0);
+  let summaryP = "";
+  if (fedRuns.length && erFloors.length) {
+    let zTop = -Infinity,
+      topRun: Run | null = null,
+      topPt: RunPoint | null = null;
+    for (const r of fedRuns)
+      for (const p of r.points) {
+        const z = runZ(design, p.deckId) ?? -Infinity;
+        if (z > zTop) ((zTop = z), (topRun = r), (topPt = p));
+      }
+    const zPump = Math.min(...erFloors);
+    const head = (v.sea_water_density_t_m3 * 1000 * 9.81 * (zTop - zPump)) / 1e6;
+    const need = v.min_hydrant_pressure_mpa + head;
+    summaryP = ` The pumps need ${fmt(need, 2)} N/mm2 for ${v.min_hydrant_pressure_mpa} N/mm2 at the highest hydrant (${deckNameOf(design, topPt!.deckId)}).`;
+    if (need > v.amber_above_share_of_pump * v.pump_pressure_mpa)
+      findings.push({
+        status: need > v.pump_pressure_mpa ? "red" : "amber",
+        message: `The fire pumps need ${fmt(need, 2)} N/mm2 to give ${v.min_hydrant_pressure_mpa} N/mm2 at the highest hydrant on ${deckNameOf(design, topPt!.deckId)}.`,
+        detail: `The water has to be lifted ${fmt(zTop - zPump)} m from the engine room floor, which costs ${fmt(head, 2)} N/mm2 before any friction loss. Our fire pumps deliver ${v.pump_pressure_mpa} N/mm2.`,
+        fix: "Use fire pumps with a higher delivery pressure, add a booster pump for the upper decks, or feed the top decks from a pressure tank.",
+        targets: [topRun!.id],
+        at: topPt!,
+        measured: `${fmt(need, 2)} N/mm2`,
+        limit: `${v.pump_pressure_mpa} N/mm2`,
+      });
+  }
+  const decksWith = decks.filter((dk) => served(dk.id).length).length;
+  return result(
+    "PIPE-FIRE-MAIN",
+    findings,
+    findings.length ? `${plural(findings.length, "fire main problem")}.${summaryP}` : `The fire main reaches every fire zone on all ${decksWith} decks with rooms and is fed from the engine room.${summaryP}`,
+  );
+}
+
+// ------------------------------------------------------------------ PIPE-WATERTIGHT
+export function pipeWatertight(ctx: RuleContext): RuleResult {
+  const v = ruleDef("PIPE-WATERTIGHT").values;
+  const { design } = ctx;
+  const runs = runsOf(design, () => true);
+  if (!runs.length) return result("PIPE-WATERTIGHT", [], "No pipes or cables yet.", "grey");
+  const L = design.hull.LOA;
+  const wt = design.bulkheads.filter((b) => b.kind === "watertight").sort((a, b) => a.x - b.x);
+  const collision = wt.length && wt[wt.length - 1].x >= v.collision_min_x_share_of_length * L ? wt[wt.length - 1] : null;
+  const findings: Finding[] = [];
+  const throughCollision: { r: Run; at: RunPoint }[] = [];
+  let count = 0;
+  const perBulkhead = new Map<string, number>();
+  for (const r of runs)
+    for (const c of watertightCrossings(design, r)) {
+      count++;
+      perBulkhead.set(c.bulkhead.id, (perBulkhead.get(c.bulkhead.id) ?? 0) + 1);
+      if (collision && c.bulkhead.id === collision.id) throughCollision.push({ r, at: c.at });
+      else if ((v.hot_kinds as string[]).includes(r.kind))
+        findings.push({
+          status: "amber",
+          message: `${r.name} passes through a watertight bulkhead at x ${fmt(c.bulkhead.x)} m on ${deckNameOf(design, c.at.deckId)}: hot exhaust pipe in a watertight penetration.`,
+          detail: "Seals and packings in a watertight penetration must not be heat sensitive, or a fire or the hot pipe itself can break the watertight integrity of the bulkhead.",
+          fix: `Route ${r.name} up through its own casing instead of through the bulkhead, or specify a steel penetration piece without heat-sensitive seals.`,
+          targets: [r.id, c.bulkhead.id],
+          at: c.at,
+        });
+    }
+  if (collision && throughCollision.length) {
+    const allowed: string[] = v.collision_allowed_kinds;
+    const wrong = throughCollision.filter((t) => !allowed.includes(t.r.kind));
+    const pipes = throughCollision.filter((t) => allowed.includes(t.r.kind));
+    for (const t of wrong) {
+      const cable = isCable(t.r.kind);
+      findings.push({
+        status: "red",
+        message: `${t.r.name} goes through the collision bulkhead below the bulkhead deck.`,
+        detail: `Only one pipe, for the forepeak tank, may pierce the collision bulkhead (x ${fmt(collision.x)} m) below the bulkhead deck. A ${cable ? "cable" : RUN_INFO[t.r.kind].short} there is a leak path straight into the ship after a bow collision.`,
+        fix: `End ${t.r.name} aft of x ${fmt(collision.x)} m, or take it forward above the bulkhead deck (${deckNameOf(design, design.bulkheadDeckId)}).`,
+        targets: [t.r.id, collision.id],
+        at: t.at,
+      });
+    }
+    if (pipes.length > v.collision_max_pipes)
+      findings.push({
+        status: "red",
+        message: `${pipes.length} pipes go through the collision bulkhead below the bulkhead deck; ${v.collision_max_pipes} is allowed.`,
+        detail: `${names(pipes.map((t) => t.r.name))} all pierce it. Only one pipe for the forepeak tank is allowed, with a screw-down valve worked from above the bulkhead deck.`,
+        fix: "Join them into one forepeak pipe, or end the others aft of the collision bulkhead.",
+        targets: [...pipes.map((t) => t.r.id), collision.id],
+        at: pipes[1].at,
+      });
+  }
+  const busiest = [...perBulkhead.entries()].sort((a, b) => b[1] - a[1])[0];
+  const bx = busiest ? design.bulkheads.find((b) => b.id === busiest[0])?.x : undefined;
+  return result(
+    "PIPE-WATERTIGHT",
+    findings,
+    findings.length
+      ? `${plural(findings.length, "problem")} with pipes or cables through watertight bulkheads.`
+      : count
+        ? `${plural(count, "pipe or cable penetration", "pipe and cable penetrations")} of watertight bulkheads below the bulkhead deck (most at x ${fmt(bx ?? 0)} m: ${busiest[1]}). Each needs a watertight transit.${collision ? ` The collision bulkhead has ${throughCollision.length === 1 ? "one forepeak pipe" : "no pipe"}.` : ""}`
+        : "No pipe or cable crosses a watertight bulkhead below the bulkhead deck.",
+  );
+}
+
+// ------------------------------------------------------------------ PIPE-FUEL-HOT
+export function pipeFuelHot(ctx: RuleContext): RuleResult {
+  const v = ruleDef("PIPE-FUEL-HOT").values;
+  const { design } = ctx;
+  const fuel = runsOf(design, (r) => r.kind === "fuel_oil");
+  if (!fuel.length) return result("PIPE-FUEL-HOT", [], "No fuel oil lines yet.", "grey");
+  const hot = runsOf(design, (r) => r.kind === "exhaust");
+  const findings: Finding[] = [];
+  const noRooms: string[] = v.no_fuel_room_types;
+  let closest = Infinity;
+  for (const f of fuel) {
+    for (const e of hot) {
+      const c = runClearance(design, f, e);
+      if (!c) continue;
+      closest = Math.min(closest, c.gap);
+      if (c.gap >= v.min_clearance_to_exhaust_m) continue;
+      const touching = c.gap < v.touching_below_m;
+      findings.push({
+        status: touching ? "red" : "amber",
+        message: touching ? `${f.name} touches ${e.name}.` : `${f.name} passes ${fmt(Math.max(0, c.gap), 2)} m from ${e.name}.`,
+        detail: `Hot exhaust pipes are the most common ignition source in a machinery space. Fuel spraying from a leaking joint onto the exhaust starts a fire at once. Clear gap ${fmt(Math.max(0, c.gap), 2)} m, our working minimum ${v.min_clearance_to_exhaust_m} m.`,
+        fix: `Move ${f.name} at least ${v.min_clearance_to_exhaust_m} m away from the exhaust, or fit spray shields on every joint, use jacketed pipe and insulate the exhaust there.`,
+        targets: [f.id, e.id],
+        at: c.at,
+        measured: `${fmt(Math.max(0, c.gap), 2)} m`,
+        limit: `${v.min_clearance_to_exhaust_m} m`,
+      });
+    }
+    const rooms = spacesCrossed(design, f).filter((c) => noRooms.includes(c.space.type));
+    if (rooms.length)
+      findings.push({
+        status: "amber",
+        message: `${f.name} runs through ${names(rooms.map((c) => c.space.name))}.`,
+        detail: `Fuel oil lines are under pressure and must be screened against spray. In ${rooms.length === 1 ? "this room" : "these rooms"} a leak would not be noticed and would put people at risk.`,
+        fix: `Route ${f.name} through machinery spaces, tanks or a pipe duct instead.`,
+        targets: [f.id],
+        at: rooms[0].at,
+      });
+  }
+  return result(
+    "PIPE-FUEL-HOT",
+    findings,
+    findings.length ? `${plural(findings.length, "fuel oil line problem")}.` : hot.length ? `All ${plural(fuel.length, "fuel oil line")} keep at least ${fmt(closest, 1)} m from the exhaust uptakes and stay out of the rooms.` : `${plural(fuel.length, "fuel oil line")}, no exhaust uptakes drawn yet.`,
+  );
+}
+
+// ------------------------------------------------------------------ CABLE-ROUTING
+export function cableRouting(ctx: RuleContext): RuleResult {
+  const v = ruleDef("CABLE-ROUTING").values;
+  const { design } = ctx;
+  const cs = cablesOf(design);
+  if (!cs.length) return result("CABLE-ROUTING", [], "No main cables yet.", "grey");
+  const risky: string[] = v.high_fire_risk_types;
+  const pat = new RegExp(v.high_fire_risk_name_pattern, "i");
+  const hot = runsOf(design, (r) => r.kind === "exhaust");
+  const findings: Finding[] = [];
+  for (const c of cs) {
+    const own = terminalEngineRooms(design, c);
+    const bad = spacesCrossed(design, c).filter((x) => (risky.includes(x.space.type) || pat.test(x.space.name)) && !own.has(x.space.id));
+    if (bad.length) {
+      const what = bad.map((x) => x.space.name);
+      findings.push({
+        status: "amber",
+        message: `${c.name} runs through ${names(what)}.`,
+        detail: `Cables for essential power must be routed clear of galleys, laundries and machinery spaces of category A so far as practicable, so a fire there does not cut the power needed to fight it. ${fmt(bad.reduce((a, x) => a + x.length, 0))} m of the cable lie inside.`,
+        fix: `Re-route ${c.name} around ${bad.length === 1 ? what[0] : "these rooms"}, for example along the corridor.`,
+        targets: [c.id],
+        at: bad[0].at,
+      });
+    }
+    for (const e of hot) {
+      const g = runClearance(design, c, e);
+      if (!g || g.gap >= v.min_clearance_to_exhaust_m) continue;
+      const inOwn = design.spaces.some((s) => own.has(s.id) && spaceDeckIds(design, s).includes(g.at.deckId) && inRect(s, g.at.x, g.at.y, -0.05));
+      if (inOwn) continue; // inside the engine room it serves
+      findings.push({
+        status: "amber",
+        message: `${c.name} passes ${fmt(Math.max(0, g.gap), 2)} m from ${e.name}.`,
+        detail: `The exhaust uptake runs in the machinery casing, which counts like the machinery space itself. Clear gap ${fmt(Math.max(0, g.gap), 2)} m, our working minimum ${v.min_clearance_to_exhaust_m} m.`,
+        fix: `Move ${c.name} at least ${v.min_clearance_to_exhaust_m} m away from the casing.`,
+        targets: [c.id, e.id],
+        at: g.at,
+        measured: `${fmt(Math.max(0, g.gap), 2)} m`,
+        limit: `${v.min_clearance_to_exhaust_m} m`,
+      });
+    }
+  }
+  return result("CABLE-ROUTING", findings, findings.length ? `${plural(findings.length, "cable routing hint")}.` : `All ${plural(cs.length, "main cable")} stay clear of galleys, laundries, other engine rooms and exhaust casings.`);
+}
+
 export const RULE_FUNCS: Record<string, (ctx: RuleContext) => RuleResult> = {
+  "PIPE-FIRE-MAIN": pipeFireMain,
+  "PIPE-WATERTIGHT": pipeWatertight,
+  "PIPE-FUEL-HOT": pipeFuelHot,
+  "CABLE-ROUTING": cableRouting,
   "FIRE-ZONE-SIZE": fireZoneSize,
   "FIRE-WALL-RATING": fireWallRating,
   "ESCAPE-TWO-EXITS": escapeTwoExits,

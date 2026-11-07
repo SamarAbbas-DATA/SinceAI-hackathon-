@@ -101,6 +101,30 @@ export interface LSA {
   massT: number; // davit + craft
 }
 
+/**
+ * Major pipes and cables. A run is a polyline of points; each point lies at the deckhead (ceiling) of its
+ * deck. Two consecutive points on different decks with the same x and y form a vertical riser.
+ */
+export const RUN_KINDS = ["fire_main", "bilge_ballast", "fuel_oil", "exhaust", "hv_cable", "feeder_cable"] as const;
+export type RunKind = (typeof RUN_KINDS)[number];
+export const PIPE_KINDS: RunKind[] = ["fire_main", "bilge_ballast", "fuel_oil", "exhaust"];
+export const CABLE_KINDS: RunKind[] = ["hv_cable", "feeder_cable"];
+export const isCable = (k: RunKind) => CABLE_KINDS.includes(k);
+
+export interface RunPoint {
+  x: number;
+  y: number;
+  deckId: string;
+}
+
+export interface Run {
+  id: string;
+  kind: RunKind;
+  name: string;
+  sizeMm: number; // outside diameter of the pipe, or of the cable bundle
+  points: RunPoint[];
+}
+
 export interface PointMass {
   massT: number;
   lcg: number;
@@ -117,6 +141,7 @@ export interface Design {
   doors: Door[];
   bulkheads: TransverseBulkhead[];
   lsa: LSA[];
+  runs: Run[]; // major pipes and cables
   divisions: Record<string, FireRating>; // key: pairKey(spaceA, spaceB)
   loading: {
     lightshipOverride: PointMass | null; // known lightship replaces the vessel.js parametric estimate
@@ -137,6 +162,7 @@ export function normalizeDesign(d: Design): Design {
   d.divisions ??= {};
   d.bulkheads ??= [];
   d.doors ??= [];
+  d.runs ??= [];
   for (const s of d.spaces) if (s.type === "tank" && !s.tank) s.tank = { content: "fuel", fillPct: 50 };
   return d;
 }
@@ -148,7 +174,8 @@ export interface Finding {
   message: string; // what is wrong, one sentence
   detail?: string; // why it matters / what was measured against what
   fix?: string; // how to resolve it
-  targets: string[]; // ids of spaces, doors, bulkheads, decks, lsa
+  targets: string[]; // ids of spaces, doors, bulkheads, decks, lsa, runs
+  at?: RunPoint; // the spot the finding is about (shown as a pin), when it is not a whole part
   measured?: string;
   limit?: string;
   ref?: RuleRef; // the clause of the source document behind this finding (attached by runRules)

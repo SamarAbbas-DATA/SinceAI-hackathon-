@@ -279,6 +279,52 @@ async function main() {
   await shot("tour-models");
   await ev(`${S}.set({ tourStep: null })`);
 
+  // ---- pipes and cables
+  await ev(`${S}.set({ tourStep: null, activeDeckId: 'D3', panel: 'issues', tool: { kind: 'select' } }); ${S}.select(null); ${S}.setView({ isolateDeck: true }); window.dispatchEvent(new CustomEvent('viewport:view', { detail: '3d' }))`);
+  await sleep(2500);
+  check("pipes and cables are shown by default", await ev(`${S}.view.showPipes && ${S}.view.showCables && ${S}.design.runs.length >= 15`), `${await ev(`${S}.design.runs.length`)} runs`);
+  check("pipe and cable checks flag the fuel line at the exhaust and the feeder over the galley", await ev(`['PIPE-FUEL-HOT', 'CABLE-ROUTING'].every((id) => ${S}.analysis.rules.find((r) => r.ruleId === id).status === 'amber') && ['PIPE-FIRE-MAIN', 'PIPE-WATERTIGHT'].every((id) => ${S}.analysis.rules.find((r) => r.ruleId === id).status === 'green')`));
+  await shot("pipes-3d");
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: 'plan' }))`);
+  await sleep(2500);
+  const zD3 = await ev(`(() => { const d = ${S}.design.decks; const a = d.find(k => k.id === 'D3').z, b = d.find(k => k.id === 'D4').z; return b - 0.06; })()`);
+  const nr0 = await ev(`${S}.design.runs.length`);
+  await ev(`${S}.set({ tool: { kind: 'run', run: 'bilge_ballast' } })`);
+  await click(await ev(`window.__project(96, 6, ${zD3})`));
+  await click(await ev(`window.__project(104, 6.4, ${zD3})`)); // straightened along x
+  await ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))`);
+  await sleep(500);
+  const drawn = await ev(`(() => { const r = ${S}.design.runs.at(-1); return { n: ${S}.design.runs.length, kind: r.kind, pts: r.points.map(p => [p.x, p.y, p.deckId]) }; })()`);
+  check("Pipe tool draws a straight pipe under the deckhead", drawn.n === nr0 + 1 && drawn.kind === "bilge_ballast" && drawn.pts.length === 2 && Math.abs(drawn.pts[0][1] - drawn.pts[1][1]) < 0.01 && Math.abs(drawn.pts[1][0] - drawn.pts[0][0] - 8) < 0.6, JSON.stringify(drawn));
+  await shot("pipe-drawn");
+  // drag the end handle of the selected pipe sideways
+  await ev(`${S}.set({ tool: { kind: 'select' } }); ${S}.select({ kind: 'run', id: ${S}.design.runs.at(-1).id })`);
+  await sleep(400);
+  const h0 = await ev(`window.__project(${drawn.pts[1][0]}, ${drawn.pts[1][1]}, ${zD3})`);
+  const h1 = await ev(`window.__project(${drawn.pts[1][0]}, 3, ${zD3})`);
+  await mouse("mouseMoved", h0.x, h0.y);
+  await sleep(80);
+  await mouse("mousePressed", h0.x, h0.y, 1);
+  await sleep(60);
+  for (let i = 1; i <= 8; i++) {
+    await mouse("mouseMoved", h0.x + ((h1.x - h0.x) * i) / 8, h0.y + ((h1.y - h0.y) * i) / 8, 1);
+    await sleep(40);
+  }
+  await mouse("mouseReleased", h1.x, h1.y, 0);
+  await sleep(500);
+  const yEnd = await ev(`${S}.design.runs.at(-1).points[1].y`);
+  check("dragging a pipe handle moves that bend", Math.abs(yEnd - 3) < 0.4, `y = ${yEnd}`);
+  await ev(`${S}.undo()`);
+  check("undo puts the bend back", Math.abs((await ev(`${S}.design.runs.at(-1).points[1].y`)) - drawn.pts[1][1]) < 0.01);
+  await ev(`document.querySelector('button[title="Cables"]').click()`);
+  await sleep(300);
+  check("the Cables button hides the cables", (await ev(`${S}.view.showCables`)) === false);
+  await ev(`document.querySelector('button[title="Cables"]').click()`);
+  await ev(`${S}.select({ kind: 'run', id: 'feeder-D4' }); ${S}.set({ activeDeckId: 'D4' })`);
+  await sleep(1200);
+  check("selecting a cable opens its inspector with its flag", await ev(`document.body.innerText.includes('Switchboard feeder cable') && document.body.innerText.includes('runs through Galley')`));
+  await shot("cable-inspector");
+
   const errors = await ev(`${S}.analysis.errors`);
   check("no calculation errors", errors.length === 0, errors.join("; "));
   ws.close();

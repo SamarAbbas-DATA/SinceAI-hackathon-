@@ -80,6 +80,36 @@ Q12 Model ships (src/data/ships.ts: Icon / Star / Legend of the Seas, Mein Schif
     - Stair queues (amber) come from the simplified Circ.1533 method with one assembly deck under ten guest
       decks; total evacuation time is well inside the limit.
 
+Q13 Fire main (rule PIPE-FIRE-MAIN, docs/REG10_Fire_Fighting.pdf)
+    What delivery pressure do your fire pumps have, and do you check hydrant pressure with friction losses?
+    Now: 0.40 N/mm2 at every hydrant (Regulation 10, 2.1.6.1, passenger ships of 4,000 GT and upwards, from the
+    document); 1.2 N/mm2 at the pumps (our value); static head only (rho g h from the engine room floor to the
+    highest fire main), no friction. Every deck and fire zone with rooms must have the fire main on that deck.
+
+Q14 Collision bulkhead (rule PIPE-WATERTIGHT)
+    Which pipes do you route through the collision bulkhead below the bulkhead deck? Now: exactly one pipe for
+    the forepeak (we take the bilge and ballast main), no cables. Regulation II-1/12 itself is not downloaded;
+    the text comes from a Gard summary. Collision bulkhead = forwardmost watertight bulkhead forward of 0.7 L.
+
+Q15 Fuel oil lines (rule PIPE-FUEL-HOT, docs/MSC_Circ647_Flammable_Leakage.pdf)
+    What clear distance do you keep between fuel oil lines and exhaust pipes? Now: 1.0 m (our value; the
+    circular gives no number, only "screened" and "clear of hot surfaces"). Fuel lines through cabins,
+    corridors, public rooms, galleys and stairs are flagged amber: inferred good practice, not a quoted rule.
+
+Q16 Cable routing (rule CABLE-ROUTING, docs/IACS_SC11_Cable_Routing_II-1_45.pdf)
+    Which distance do you keep between main cables and machinery casings, and which spaces count as high fire
+    risk? Now: 0.5 m from an exhaust uptake (our value); galleys, laundries (by name) and engine rooms other
+    than the one the cable starts or ends in.
+
+Q17 Default pipes and cables (src/engine/generators.ts defaultRuns)
+    The default arrangement is a rough sketch from general knowledge, not a piping drawing: fire main along the
+    corridor of every deck with rooms plus a riser from the engine room; bilge and ballast main on the tank top
+    from the aft peak to the forepeak; fuel oil lines from the two fuel tanks nearest the engine room;
+    exhaust uptakes from the two largest engine rooms straight up to the top deck; HV cable from the aftmost
+    engine room to the propulsion motors aft; feeder riser plus one feeder per deck along the corridor.
+    Sizes: fire main 200 mm, bilge 300 mm, fuel 100 mm, exhaust 900 mm, HV bundle 120 mm, feeder 80 mm.
+    Pipes and cables add no weight to the stability calculation yet.
+
 DOCUMENTS STILL MISSING
 - (done) US Coast Guard stair guideline is in docs/.
 - SOLAS II-1/7-3 permeability table, IS Code 2008 Part A, SOLAS III/21: needed to move Q5 to Q7

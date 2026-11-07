@@ -1,4 +1,4 @@
-import type { SpaceType, Status } from "../engine/types";
+import type { SpaceType, Status, RunKind } from "../engine/types";
 
 // Vivid palette that reads well on both the dark and the light background.
 // Red and amber are kept free for rule flags.
@@ -91,3 +91,31 @@ export const STATUS_LABEL: Record<Status, string> = {
 };
 
 export const LSA_COLOR = { lifeboat: "#fb923c", liferaft: "#f8fafc" };
+
+/**
+ * Pipes and cables. Pipe colours follow the ISO 14726 marine pipe colour code (fire fighting red, sea water
+ * green, fuel oil brown); exhaust is steel grey; cables are thin lines in their own colours.
+ */
+export const RUN_COLOR: Record<RunKind, string> = {
+  fire_main: "#d23a32",
+  bilge_ballast: "#3f9a63",
+  fuel_oil: "#9a6532",
+  exhaust: "#9b9893",
+  hv_cable: "#e6b422",
+  feeder_cable: "#a487de",
+};
+
+/** Drawn radius in metres: pipes thick enough to read at ship scale, cables thin. */
+export function runDrawRadius(kind: RunKind, sizeMm: number): number {
+  if (kind === "exhaust") return Math.max(0.3, sizeMm / 2000);
+  if (kind === "hv_cable") return 0.075;
+  if (kind === "feeder_cable") return 0.055;
+  return Math.max(0.17, sizeMm / 2000);
+}
+
+export const RUN_ICON = {
+  pipe: "M3 9h7a3 3 0 0 1 3 3v9M3 14h4a1 1 0 0 1 1 1v6M2 9v5M12 21h7M20 6v6M17 9h6",
+  cable: "M3 18c3 0 4-2.5 4-6s1-6 5-6 5 2.5 5 6-1 6 4 6M3 16v4M21 16v4",
+  pipesView: "M3 8h11a3 3 0 0 1 3 3v9M3 13h7a2 2 0 0 1 2 2v5",
+  cablesView: "M3 17c4 0 4-10 9-10s5 10 9 10",
+};

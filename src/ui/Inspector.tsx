@@ -6,7 +6,9 @@ import { sharedEdges, OUTSIDE, overlapsWith } from "../engine/topology";
 import { requiredMinutes, RULES } from "../engine/rules";
 import { sortedDecks, OUTFIT_KG_PER_M2, LIQUID_DENSITY, TANK_STRUCTURE_FACTOR, spaceVertical, centreOutsideHull } from "../engine/vessel";
 import { autoDoors } from "../engine/generators";
-import { TYPE_LABEL, TYPE_COLOR, TYPE_ICON } from "./theme";
+import { TYPE_LABEL, TYPE_COLOR, TYPE_ICON, RUN_COLOR } from "./theme";
+import { PIPE_KINDS, CABLE_KINDS, isCable, type Run } from "../engine/types";
+import { RUN_INFO, runLength, runZ, spacesCrossed } from "../engine/systems";
 import { focusOn } from "./three/Viewport";
 
 const RATING_MIN: Record<string, number> = RULES.fire_rating_scale;
@@ -44,6 +46,7 @@ export function Inspector() {
   if (sel.kind === "space") return <SpaceInspector id={sel.id} />;
   if (sel.kind === "door") return <DoorInspector id={sel.id} />;
   if (sel.kind === "lsa") return <LSAInspector id={sel.id} />;
+  if (sel.kind === "run") return <RunInspector id={sel.id} />;
   return <BulkheadInspector id={sel.id} />;
 }
 
@@ -51,7 +54,7 @@ function EmptyInspector() {
   return (
     <div className="p-4 text-xs leading-relaxed text-muted">
       <p className="mb-2 text-sm font-medium text-fg">Nothing selected</p>
-      <p>Click a space, door, bulkhead or lifeboat in the 3D view to edit it. Pick something in the build bar at the bottom to add new parts.</p>
+      <p>Click a space, door, bulkhead, lifeboat, pipe or cable in the 3D view to edit it. Pick something in the build bar at the bottom to add new parts, or the Pipe and Cable tools on the left.</p>
       <ul className="mt-3 list-disc space-y-1 pl-4">
         <li>Drag a space to move it. Edges snap to neighbours (hold Shift to turn snapping off). A move that would overlap another space is undone.</li>
         <li>Double-click a space to fly the camera to it.</li>
@@ -366,6 +369,61 @@ function BulkheadInspector({ id }: { id: string }) {
   );
 }
 
+function RunInspector({ id }: { id: string }) {
+  const design = useStore((s) => s.design);
+  const edit = useStore((s) => s.edit);
+  const analysis = useStore((s) => s.analysis);
+  const r = design.runs.find((x) => x.id === id);
+  if (!r) return <EmptyInspector />;
+  const up = (fn: (t: Run) => void) => edit((x) => fn(x.runs.find((q) => q.id === id)!));
+  const cable = isCable(r.kind);
+  const kinds = cable ? CABLE_KINDS : PIPE_KINDS;
+  const decks = [...new Set(r.points.map((p) => p.deckId))].map((k) => design.decks.find((d) => d.id === k)?.name ?? k);
+  const rooms = spacesCrossed(design, r).map((c) => c.space.name);
+  const findings = (analysis?.rules ?? []).flatMap((x) => x.findings).filter((f) => f.targets.includes(id));
+  const extend = (from: "start" | "end") => {
+    const st = useStore.getState();
+    const p = from === "end" ? r.points[r.points.length - 1] : r.points[0];
+    st.set({ tool: { kind: "run", run: r.kind, extend: r.id, from }, activeDeckId: p.deckId });
+    focusOn(p.x, p.y, runZ(design, p.deckId) ?? 0);
+  };
+  return (
+    <Section
+      title={cable ? "Cable" : "Pipe"}
+      right={
+        <Btn kind="danger" onClick={() => deleteSelection()}>
+          Delete
+        </Btn>
+      }
+    >
+      <div className="mb-2 flex items-center gap-2 text-[12px]">
+        <span className="h-[3px] w-5 rounded" style={{ background: RUN_COLOR[r.kind] }} />
+        <span className="text-fg">{RUN_INFO[r.kind].label}</span>
+      </div>
+      <Text label="Name" value={r.name} onChange={(v) => up((t) => (t.name = v))} />
+      <Select label="Type" value={r.kind} options={kinds.map((k) => ({ value: k, label: RUN_INFO[k].label }))} onChange={(v) => up((t) => ((t.kind = v), (t.sizeMm = RUN_INFO[v].sizeMm)))} />
+      <Num label={cable ? "Bundle diameter" : "Outside diameter"} value={r.sizeMm} unit="mm" step={10} min={10} digits={0} onChange={(v) => up((t) => (t.sizeMm = Math.round(v)))} />
+      <KV k="Length" v={runLength(design, r).toFixed(1)} unit="m" />
+      <KV k="Decks" v={decks.join(", ")} />
+      <KV k="Points" v={r.points.length} />
+      {rooms.length > 0 && <p className="mt-1 text-[11px] leading-relaxed text-muted">Runs through: {rooms.slice(0, 8).join(", ")}{rooms.length > 8 ? ` and ${rooms.length - 8} more` : ""}.</p>}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Btn onClick={() => extend("end")} title="Continue drawing from the last point">Extend from end</Btn>
+        <Btn onClick={() => extend("start")} title="Continue drawing from the first point">Extend from start</Btn>
+        <Btn kind="ghost" disabled={r.points.length <= 2} onClick={() => up((t) => void t.points.pop())} title="Remove the last point">Remove last point</Btn>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted">{RUN_INFO[r.kind].what} Drag the round handles in 3D to move a bend; a riser keeps its two ends together. Pipes and cables are drawn under the deckhead of their deck.</p>
+      {findings.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {findings.map((f, i) => (
+            <FindingRow key={i} f={f} i={i} />
+          ))}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function LSAInspector({ id }: { id: string }) {
   const design = useStore((s) => s.design);
   const edit = useStore((s) => s.edit);
@@ -404,6 +462,7 @@ export function deleteSelection() {
       for (const k of Object.keys(d.divisions)) if (k.split("|").includes(sel.id)) delete d.divisions[k];
     } else if (sel.kind === "door") d.doors = d.doors.filter((x) => x.id !== sel.id);
     else if (sel.kind === "lsa") d.lsa = d.lsa.filter((x) => x.id !== sel.id);
+    else if (sel.kind === "run") d.runs = d.runs.filter((x) => x.id !== sel.id);
     else d.bulkheads = d.bulkheads.filter((x) => x.id !== sel.id);
   });
   st.select(null);

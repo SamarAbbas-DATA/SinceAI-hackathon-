@@ -6,7 +6,8 @@ import { Inspector, deleteSelection } from "./Inspector";
 import { IssuesPanel, HydroPanel, StabilityPanel, DamagePanel, EvacPanel, PerformancePanel, DesignPanel } from "./panels";
 import { GuidePanel, SourcesPanel, Tour } from "./help";
 import { TestPanel } from "./TestPanel";
-import { TYPE_COLOR, TYPE_LABEL, TYPE_ICON, STATUS_VAR, LSA_COLOR, EXIT_COLOR } from "./theme";
+import { TYPE_COLOR, TYPE_LABEL, TYPE_ICON, STATUS_VAR, LSA_COLOR, EXIT_COLOR, RUN_COLOR, RUN_ICON } from "./theme";
+import { RUN_INFO } from "../engine/systems";
 import { sortedDecks, spaceVertical, centreOutsideHull } from "../engine/vessel";
 import { exportDesign, exportVesselSpec, parseDesign, parseOffsetsCSV, applyOffsets } from "../engine/io";
 import { blankDesign } from "../data/demoDesign";
@@ -14,7 +15,7 @@ import { MODELS } from "../data/ships";
 import { sharedEdges, overlapsWith } from "../engine/topology";
 import { requiredMinutes, RULES } from "../engine/rules";
 import { autoDoors } from "../engine/generators";
-import { pairKey, type SpaceType, type FireRating } from "../engine/types";
+import { pairKey, isCable, PIPE_KINDS, CABLE_KINDS, type SpaceType, type FireRating } from "../engine/types";
 import { downloadReport } from "./report";
 import { f, Icon } from "./fields";
 
@@ -164,6 +165,7 @@ export function App() {
       if (mod && (k === "y" || (k === "z" && e.shiftKey))) return (e.preventDefault(), s.redo());
       if (mod && k === "d" && s.selection?.kind === "space") return (e.preventDefault(), duplicateSelected());
       if (mod) return;
+      if (s.tool.kind === "run" && ["Delete", "Backspace", "Enter"].includes(e.key)) return; // handled by the drawing tool
       if (e.key === "Delete" || e.key === "Backspace") return deleteSelection();
       if (e.key === "Escape") return s.set({ tool: { kind: "select" }, tourStep: null });
       if (e.key.startsWith("Arrow") && s.selection?.kind === "space") {
@@ -189,6 +191,8 @@ export function App() {
         b: { kind: "stamp", stamp: "cabin_block" },
         k: { kind: "stamp", stamp: "stair_core" },
         e: { kind: "route" },
+        p: { kind: "run", run: s.runKinds.pipe },
+        c: { kind: "run", run: s.runKinds.cable },
       };
       if (map[k] && s.mode === "design") return s.set({ tool: map[k] });
       if (k === "t") return switchMode(s.mode === "design" ? "test" : "design");
@@ -261,6 +265,8 @@ export function App() {
       { label: "Fire zone bulkhead", hint: "Z", onClick: () => st.set({ tool: { kind: "bulkhead", bk: "fire_zone" } }) },
       { label: "Lifeboat", hint: "L", onClick: () => st.set({ tool: { kind: "lsa", lsa: "lifeboat" } }) },
       { label: "Liferaft", hint: "R", onClick: () => st.set({ tool: { kind: "lsa", lsa: "liferaft" } }) },
+      ...PIPE_KINDS.map((k, i) => ({ label: RUN_INFO[k].label, hint: i === 0 ? "P" : "", sep: i === 0, onClick: () => st.set({ tool: { kind: "run", run: k }, runKinds: { ...st.runKinds, pipe: k } }) })),
+      ...CABLE_KINDS.map((k, i) => ({ label: RUN_INFO[k].label, hint: i === 0 ? "C" : "", onClick: () => st.set({ tool: { kind: "run", run: k }, runKinds: { ...st.runKinds, cable: k } }) })),
     ],
     View: [
       { label: st.theme === "dark" ? "Light theme" : "Dark theme", onClick: () => st.setTheme(st.theme === "dark" ? "light" : "dark") },
@@ -272,6 +278,8 @@ export function App() {
       { label: `${st.view.showLabels ? "Hide" : "Show"} space names`, onClick: () => st.setView({ showLabels: !st.view.showLabels }) },
       { label: `${st.view.showRoutes ? "Hide" : "Show"} escape routes`, onClick: () => st.setView({ showRoutes: !st.view.showRoutes }) },
       { label: `${st.view.showDoors ? "Hide" : "Show"} emergency door icons`, onClick: () => st.setView({ showDoors: !st.view.showDoors }) },
+      { label: `${st.view.showPipes ? "Hide" : "Show"} pipes`, onClick: () => st.setView({ showPipes: !st.view.showPipes }), sep: true },
+      { label: `${st.view.showCables ? "Hide" : "Show"} cables`, onClick: () => st.setView({ showCables: !st.view.showCables }) },
     ],
     Analyze: TABS.filter((t) => !t.testOnly && !["guide", "sources"].includes(t.id)).map((t) => ({ label: t.label, onClick: () => st.set({ panel: t.id }) })),
     Test: (["sea", "heel", "flood", "evac"] as TestKind[]).map((k) => ({
@@ -504,6 +512,8 @@ function toolHint(t: Tool): string {
       return `${t.lsa === "lifeboat" ? "Lifeboat" : "Liferaft"}: click near the ship's side.`;
     case "stamp":
       return t.stamp === "cabin_block" ? "Cabin block: click where the aft end of the corridor starts." : "Stair core: click to place a stair from this deck to the top.";
+    case "run":
+      return `${RUN_INFO[t.run].label}: click to add points, change deck for a riser. Enter finishes, Backspace undoes.`;
     default:
       return "";
   }
@@ -631,19 +641,84 @@ function ToolRail() {
     { t: { kind: "lsa", lsa: "lifeboat" }, label: "Lifeboat", k: "L", icon: ICONS.lifeboat, color: LSA_COLOR.lifeboat },
     { t: { kind: "lsa", lsa: "liferaft" }, label: "Liferaft", k: "R", icon: ICONS.liferaft, color: "#d8d4ce" },
   ];
+  const runTool = st.tool.kind === "run" ? st.tool : null;
   return (
-    <div data-tour="tools" className="absolute top-14 left-3 flex flex-col items-center gap-0.5">
+    <div data-tour="tools" className="absolute top-3 left-3 flex flex-col items-start gap-3">
+      <RailGroup>
       {items.map((it, i) => (
         <RailButton key={it.label} active={is(it.t)} label={`${it.label}  ${it.k}`} icon={it.icon} color={it.color} delay={i * 35} onClick={() => st.set({ tool: it.t })} />
       ))}
-      <div className="my-2 h-px w-5 bg-line" />
-      <ViewToggle k="isolateDeck" label="Hide decks above" icon={ICONS.layers} />
-      <ViewToggle k="showHull" label="Hull" icon={ICONS.hull} />
-      <ViewToggle k="showWater" label="Waterline" icon={ICONS.water} />
-      <ViewToggle k="showBulkheads" label="Bulkheads" icon={ICONS.bulkheads} />
-      <ViewToggle k="showRoutes" label="Escape routes" icon={ICONS.routes} />
-      <ViewToggle k="showDoors" label="Emergency door icons" icon={ICONS.exits} />
-      <ViewToggle k="showLabels" label="Space names" icon={ICONS.names} />
+      <div className="my-1 h-px w-5 bg-line" />
+      <div data-tour="systems" className="relative flex flex-col items-center gap-0.5">
+        <RailButton active={!!runTool && !isCable(runTool.run)} label={`Pipe: ${RUN_INFO[st.runKinds.pipe].label}  P`} icon={RUN_ICON.pipe} color={RUN_COLOR[st.runKinds.pipe]} delay={230} onClick={() => st.set({ tool: runTool && !isCable(runTool.run) ? { kind: "select" } : { kind: "run", run: st.runKinds.pipe } })} />
+        <RailButton active={!!runTool && isCable(runTool.run)} label={`Cable: ${RUN_INFO[st.runKinds.cable].label}  C`} icon={RUN_ICON.cable} color={RUN_COLOR[st.runKinds.cable]} delay={265} onClick={() => st.set({ tool: runTool && isCable(runTool.run) ? { kind: "select" } : { kind: "run", run: st.runKinds.cable } })} />
+        {runTool && <RunKindPicker />}
+      </div>
+      </RailGroup>
+      <RailGroup delay={120}>
+      <span className="label self-start px-1 pt-0.5 pb-1">View</span>
+      {/* three short columns so the group stays clear of the build bar; routes, door icons and names on the right */}
+      <div className="grid grid-cols-3 gap-0.5">
+        <ViewToggle k="isolateDeck" label="Hide decks above" icon={ICONS.layers} />
+        <ViewToggle k="showHull" label="Hull" icon={ICONS.hull} />
+        <ViewToggle k="showRoutes" label="Escape routes" icon={ICONS.routes} />
+        <ViewToggle k="showWater" label="Waterline" icon={ICONS.water} />
+        <ViewToggle k="showBulkheads" label="Bulkheads" icon={ICONS.bulkheads} />
+        <ViewToggle k="showDoors" label="Emergency door icons" icon={ICONS.exits} />
+        <ViewToggle k="showPipes" label="Pipes" icon={RUN_ICON.pipesView} />
+        <ViewToggle k="showCables" label="Cables" icon={RUN_ICON.cablesView} />
+        <ViewToggle k="showLabels" label="Space names" icon={ICONS.names} />
+      </div>
+      </RailGroup>
+    </div>
+  );
+}
+
+/** Frosted rounded panel that groups rail buttons: a light tint of the text colour (whitish on dark, grey on light). */
+function RailGroup({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+  return (
+    <div
+      className="anim-rise flex flex-col items-center gap-0.5 rounded-[12px] p-1"
+      style={{
+        animationDelay: `${delay}ms`,
+        background: "color-mix(in srgb, var(--fg) 8%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--fg) 13%, transparent)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        boxShadow: "0 8px 24px -14px rgba(0,0,0,0.45)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Pipe or cable type picker, beside the rail while a pipe or cable tool is on. */
+function RunKindPicker() {
+  const st = useStore();
+  if (st.tool.kind !== "run") return null;
+  const cur = st.tool.run;
+  const cable = isCable(cur);
+  const kinds = cable ? CABLE_KINDS : PIPE_KINDS;
+  return (
+    <div key={cable ? "c" : "p"} className="anim-wipe absolute bottom-0 left-12 z-20 flex flex-col rounded-[7px] border border-line bg-surface/95 py-1 shadow-lg">
+      <span className="label px-2.5 pt-0.5 pb-1">{cable ? "Cable" : "Pipe"}</span>
+      {kinds.map((k, i) => {
+        const on = k === cur;
+        return (
+          <button
+            key={k}
+            className={`anim-wipe flex items-center gap-2 px-2.5 py-[4px] text-left text-[11.5px] whitespace-nowrap transition-colors ${on ? "text-fg" : "text-muted hover:text-fg"}`}
+            style={{ animationDelay: `${i * 30}ms` }}
+            onClick={() => st.set({ tool: { kind: "run", run: k }, runKinds: { ...st.runKinds, [cable ? "cable" : "pipe"]: k } })}
+          >
+            <span className="rounded" style={{ background: RUN_COLOR[k], width: 14, height: cable ? 2 : 4 }} />
+            {RUN_INFO[k].label}
+            {on && <span className="ml-auto h-[3px] w-[3px] rounded-full bg-accent" />}
+          </button>
+        );
+      })}
+      <span className="mt-1 border-t border-line px-2.5 pt-1 text-[10px] text-faint">{(st.design.runs ?? []).filter((r) => isCable(r.kind) === cable).length} drawn</span>
     </div>
   );
 }
@@ -673,25 +748,26 @@ function RailButton({ active, label, icon, color, onClick, delay = 0 }: { active
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className={`anim-pop relative flex h-9 w-9 items-center justify-center transition-colors ${lit ? "text-fg" : "text-muted"}`}
+      className={`anim-pop relative flex h-9 w-9 items-center justify-center text-fg transition-colors`}
       style={{ animationDelay: `${delay}ms` }}
     >
       <HoverTile color={tint} show={lit} strong={active} className="inset-0.5" />
       {active && <span className="absolute top-2 bottom-2 -left-1 w-[2px] rounded bg-accent" />}
-      <Icon d={icon} size={19} className="relative" style={{ color: lit ? tint : undefined, opacity: lit ? 0.7 : 1, transition: "color 0.2s, opacity 0.2s" }} />
-      {hover && <span className="anim-wipe pointer-events-none absolute left-11 z-30 rounded border border-line bg-surface px-2 py-1 text-[11px] whitespace-nowrap text-fg shadow-lg">{label}</span>}
+      <Icon d={icon} size={19} className="relative" style={{ color: lit ? tint : undefined, opacity: lit ? 0.75 : 0.88, transition: "color 0.2s, opacity 0.2s" }} />
+      {hover && <span className="anim-wipe pointer-events-none absolute left-12 z-30 rounded border border-line bg-surface px-2 py-1 text-[11px] whitespace-nowrap text-fg shadow-lg">{label}</span>}
     </button>
   );
 }
 
-function ViewToggle({ k, label, icon }: { k: "isolateDeck" | "showHull" | "showWater" | "showBulkheads" | "showRoutes" | "showLabels" | "showDoors"; label: string; icon: string }) {
+function ViewToggle({ k, label, icon }: { k: "isolateDeck" | "showHull" | "showWater" | "showBulkheads" | "showRoutes" | "showLabels" | "showDoors" | "showPipes" | "showCables"; label: string; icon: string }) {
   const on = useStore((s) => s.view[k]);
   const setView = useStore((s) => s.setView);
   const [hover, setHover] = useState(false);
   return (
-    <button title={label} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={() => setView({ [k]: !on })} className={`group relative flex h-8 w-9 items-center justify-center transition-colors ${on ? "text-fg" : "text-faint"}`}>
-      <HoverTile color="var(--fg)" show={hover} className="inset-x-0.5 inset-y-0" />
-      <Icon d={icon} size={17} className="relative" style={{ opacity: hover ? 0.7 : 1, transition: "opacity 0.2s" }} />
+    <button title={label} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={() => setView({ [k]: !on })} className={`group relative flex h-8 w-9 items-center justify-center transition-colors ${on ? "text-fg" : "text-muted"}`}>
+      <HoverTile color="var(--fg)" show={hover} className="inset-0" />
+      <Icon d={icon} size={17} className="relative" style={{ opacity: hover ? 0.75 : on ? 0.95 : 0.45, transition: "opacity 0.2s" }} />
+      <span className="absolute right-[5px] bottom-[5px] h-[3px] w-[3px] rounded-full bg-accent transition-opacity duration-200" style={{ opacity: on ? 1 : 0 }} />
       <span className="pointer-events-none absolute left-11 z-30 hidden rounded border border-line bg-surface px-2 py-1 text-[11px] whitespace-nowrap text-fg shadow-lg group-hover:block">
         {label} <span className="text-muted">{on ? "on" : "off"}</span>
       </span>

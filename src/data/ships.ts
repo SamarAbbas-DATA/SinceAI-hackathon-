@@ -9,6 +9,7 @@ import { sharedEdges } from "../engine/topology";
 import { requiredMinutes } from "../engine/rules";
 import { createShip, halfBreadthAt } from "../engine/vessel";
 import { blankDesign, demoDesign } from "./demoDesign";
+import { defaultRuns } from "../engine/generators";
 
 type Role = "tank" | "machinery" | "crew" | "service" | "muster" | "public" | "cabin";
 
@@ -230,6 +231,8 @@ function build(spec: ShipSpec): Design {
     lsa.push({ id: `lr${i + 1}`, kind: "liferaft", deckId: mz.id, x: +x.toFixed(1), y: +(side * (halfBreadthAt(ship, x, mz.z + 0.01) - 1)).toFixed(1), capacity: spec.rafts.capacity, massT: 1.5 });
   }
   d.lsa = lsa;
+  // 8. Major pipes and cables (rough default arrangement)
+  d.runs = defaultRuns(d, { halfBreadth: (x, z) => halfBreadthAt(ship, Math.min(Math.max(x, 0), spec.LOA), z) });
   return d;
 }
 
