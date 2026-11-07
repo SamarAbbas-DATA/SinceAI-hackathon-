@@ -1,0 +1,19 @@
+# Netlify: static build of the Vite app (no server needed; all analysis runs in the browser).
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# PDFs open at a page (#page=N): let browsers cache them, they rarely change.
+[[headers]]
+  for = "/docs/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# Hashed JS/CSS bundles never change under the same name.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

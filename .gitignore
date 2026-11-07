@@ -31,5 +31,8 @@ desktop.ini
 # large reference videos (kept locally; screenshots and the wave GIF stay in the repo)
 reference_images/*.mp4
 
+# Netlify CLI local state
+.netlify/
+
 # Claude Code local settings
 .claude/settings.local.json

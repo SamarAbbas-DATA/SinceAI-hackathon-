@@ -43,7 +43,13 @@ Deep links: `http://localhost:5173/?panel=stability&deck=D4` (panels: issues, in
 
 ## Is AI used?
 
-No. Every flag comes from deterministic code: geometry and graph checks plus naval architecture calculations (vessel.js), compared with the numbers in `rules.json`. The checks run automatically about 200 ms after every edit, and the same design always gives the same result.
+Not for the checks. Every flag comes from deterministic code: geometry and graph checks plus naval architecture calculations (vessel.js), compared with the numbers in `rules.json`. The checks run automatically about 200 ms after every edit, and the same design always gives the same result.
+
+**Fix with AI** (button next to Test) is the only place a model is used, and it is optional. `src/engine/fixes.ts` proposes repairs for each flag, tries each on a copy of the design and keeps only those that improve the flag without making anything else worse. When several pass, a small model on OpenRouter picks one (`netlify/functions/fix-choice.mts`; default `google/gemini-2.5-flash-lite`, free models as fallback). Without a key, or when the AI is slow, the smallest safe change is used. The run then plays the fixes one by one in 3D with Pause, Skip and Stop, and can be undone in one step.
+
+### Hosting on Netlify
+
+`netlify.toml` builds the site (`npm run build`, publish `dist`, Node 20) and the function at `/api/fix-choice`. Set `OPENROUTER_API_KEY` under Site configuration > Environment variables (optional: `OPENROUTER_MODEL`). Locally, `npm run dev` serves the same function with the key from `.env`.
 
 ## Files you can load
 

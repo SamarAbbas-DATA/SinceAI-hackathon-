@@ -45,6 +45,15 @@ TASK: pipes and cables (fire main, bilge and ballast, fuel oil, exhaust, HV and 
     docs/IACS_SDC8_Watertight_Penetrations_II-1_13.pdf
   - tests/systems.test.ts, scripts/check-systems.ts (prints the four checks for every model ship)
 
+TASK: Fix with AI (automatic fixes for flags, optional AI choice, animated run)
+  - src/engine/fixes.ts        catalogue of fixes per rule, verification on the whole analysis, planner
+  - src/engine/fixWorker.ts    runs the planner in a Web Worker
+  - src/ui/FixDirector.tsx     the animated run (camera, tweens, rings) and the bar with Pause / Skip / Stop
+  - src/ai/client.ts, netlify/functions/fix-choice.mts   OpenRouter call (key only on the server)
+  - tests/fixes.test.ts, scripts/e2e.mjs (stand-in AI via window.__fakeAI)
+  - A new rule needs a catalogue entry in fixes.ts if it can be fixed automatically; otherwise it is listed as
+    "left for a designer". The AI never sets a verdict or geometry, it only picks a verified option.
+
 TASK: file import / export
   - src/engine/io.ts (design JSON, vessel.js JSON, offsets CSV), src/ui/App.tsx loadMesh (STL/OBJ/glTF)
   - tests/io.test.ts, tests/features.test.ts

@@ -1,5 +1,7 @@
 # Small local AI: where it could help (ideas, not implemented)
 
+> Superseded: the tool now has "Fix with AI" (OpenRouter, see README). These local-model ideas are kept for reference only.
+
 Every pass, amber or red verdict in this tool comes from deterministic code and `rules.json`, and it stays that way. A local AI would only add a few convenience features around the edges. It never decides whether something complies, never computes a physical value and never changes a threshold.
 
 ## Ground rules

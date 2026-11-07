@@ -46,6 +46,29 @@ export interface TestSettings {
   restart: number; // bump to restart the animation
 }
 
+/** State of a "Fix with AI" run (null when none). Editing is locked while it is not null. */
+export interface FixRun {
+  phase: "planning" | "ready" | "running" | "finished";
+  progress: { text: string; done: number; total: number };
+  plan: import("../engine/fixes").FixPlan | null;
+  current: number; // step being shown
+  paused: boolean;
+  stopped: boolean;
+  ai: { ok: boolean; model?: string } | null;
+  caption: { title: string; detail: string; ai?: string; done?: boolean } | null;
+  scoreStart: number;
+  applied: number;
+  error?: string;
+}
+/** Short-lived 3D effects (rings) at the spots a fix changes. */
+export interface FixFx {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  kind: "focus" | "done";
+}
+
 const STORAGE_KEY = "ship-precheck-design-v1";
 const PREVIOUS_KEY = "ship-precheck-previous-session";
 const THEME_KEY = "ship-precheck-theme";
@@ -127,6 +150,10 @@ interface State {
   setTheme: (t: "dark" | "light") => void;
   setRefMesh: (m: RefMesh | null) => void;
   notify: (text: string, kind?: "error" | "info" | "ok") => void;
+  fix: FixRun | null;
+  setFix: (p: Partial<FixRun> | null) => void;
+  fx: FixFx[];
+  addFx: (f: Omit<FixFx, "id">) => void;
 }
 
 let gestureStart: Design | null = null;
@@ -194,6 +221,7 @@ export const useStore = create<State>((set, get) => {
     switchModel: (id) => {
       const st = get();
       if (id === st.modelId) return;
+      if (st.fix) return st.notify("Finish or stop the fix run first.", "info");
       const m = MODELS.find((x) => x.id === id);
       if (!m) return;
       gestureStart = null;
@@ -294,6 +322,14 @@ export const useStore = create<State>((set, get) => {
       }
     },
     setRefMesh: (m) => set({ refMesh: m }),
+    fix: null,
+    setFix: (p) => set({ fix: p === null ? null : ({ ...(get().fix ?? ({} as FixRun)), ...p } as FixRun) }),
+    fx: [],
+    addFx: (f) => {
+      const id = Date.now() + Math.random();
+      set({ fx: [...get().fx.slice(-12), { ...f, id }] });
+      setTimeout(() => set({ fx: get().fx.filter((x) => x.id !== id) }), 1800);
+    },
     notify: (text, kind = "info") => {
       if (toastTimer) clearTimeout(toastTimer);
       set({ toast: { text, kind, id: Date.now() } });

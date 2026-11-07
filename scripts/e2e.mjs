@@ -325,6 +325,41 @@ async function main() {
   check("selecting a cable opens its inspector with its flag", await ev(`document.body.innerText.includes('Switchboard feeder cable') && document.body.innerText.includes('runs through Galley')`));
   await shot("cable-inspector");
 
+  // ---- Fix with AI (a stand-in AI answers in the browser test, no network)
+  await ev(`${S}.select(null); ${S}.set({ panel: 'issues', activeDeckId: 'D3' }); window.__fakeAI = (req) => ({ choice: req.options[req.options.length - 1].id, reason: 'test choice' })`);
+  const designBefore = await ev(`JSON.stringify(${S}.design)`);
+  const score0 = await ev(`${S}.analysis.score.score`);
+  await ev(`document.querySelector('[data-tour="fix"]').click()`);
+  let phase = "";
+  for (let i = 0; i < 120 && phase !== "ready" && phase !== "finished"; i++) {
+    await sleep(250);
+    phase = await ev(`${S}.fix?.phase ?? ''`);
+  }
+  const planned = await ev(`(() => { const p = ${S}.fix.plan; return { steps: p.steps.length, ai: p.steps.filter(s => s.byAI).length, after: p.scoreAfter, skipped: p.skipped.length }; })()`);
+  check("Fix with AI plans verified fixes (stand-in AI picks between them)", phase === "ready" && planned.steps > 3 && planned.after > score0 && planned.ai > 0, JSON.stringify(planned));
+  await shot("fix-ready");
+  check("editing is locked while a fix run is open", await ev(`!document.querySelector('[data-tour="hotbar"]') && !document.querySelector('[data-tour="tools"]')`));
+  await ev(`[...document.querySelectorAll('button')].find(b => b.textContent === 'Start').click()`);
+  await sleep(2600);
+  await shot("fix-running");
+  const running = await ev(`(() => { const f = ${S}.fix; return { phase: f.phase, cur: f.current, caption: f.caption?.detail ?? '' }; })()`);
+  check("the run shows each fix with a caption", running.phase === "running" && running.caption.length > 5, JSON.stringify(running));
+  await sleep(6000);
+  await shot("fix-running-2");
+  await ev(`[...document.querySelectorAll('button')].find(b => b.textContent === 'Stop').click()`);
+  for (let i = 0; i < 40 && phase !== "finished"; i++) {
+    await sleep(250);
+    phase = await ev(`${S}.fix?.phase ?? ''`);
+  }
+  await sleep(1200);
+  const stopped = await ev(`(() => { const f = ${S}.fix; return { phase: f.phase, applied: f.applied, stopped: f.stopped, score: ${S}.analysis.score.score }; })()`);
+  check("Stop ends the run after the current fix and keeps what was done", stopped.phase === "finished" && stopped.stopped && stopped.applied >= 1 && stopped.score > score0, JSON.stringify(stopped));
+  await shot("fix-finished");
+  await ev(`[...document.querySelectorAll('button')].find(b => b.textContent === 'Undo all').click()`);
+  await sleep(600);
+  check("Undo all restores the design exactly", (await ev(`JSON.stringify(${S}.design)`)) === designBefore && (await ev(`${S}.fix`)) === null);
+  await ev(`delete window.__fakeAI`);
+
   const errors = await ev(`${S}.analysis.errors`);
   check("no calculation errors", errors.length === 0, errors.join("; "));
   ws.close();

@@ -79,6 +79,14 @@ Done in session 10 (2026-11-07, branch samar-version): regulation audit
 - Demo score 64 to 63 (one new red rule); model ships unchanged apart from the new green rules. THINGS_TO_ASK Q18 to Q20. Ideas for a small local AI in docs/LOCAL_AI_IDEAS.md (not implemented).
 - Tests: 117 unit/physics (tests/audit.test.ts new, analytic heel and lever checks), 32 browser checks.
 
+Done in session 11 (2026-11-07, branch samar-version): Netlify and Fix with AI
+- Netlify ready: vite.config copies docs/**/*.pdf into dist/docs (the "Open p. N" links); netlify.toml (build, Node 20, cache headers, functions). Checked with the production build served statically: no console errors, PDFs, logos and the worker load.
+- Fix with AI (button next to Test, Test menu, tour step, How to use): src/engine/fixes.ts proposes repairs for each flag (wall ratings, stair and door widths, landings, handrails, auto doors, collision bulkhead position, extra watertight bulkhead, fewer berths, raising a deck, removing a connecting door, stair widening for queues when the stairwell has room, straightening a cable, moving a fuel line or cable away from the exhaust, laying a missing fire main, cutting a run at the collision bulkhead, lifeboats, plausibility resets). Each candidate is applied to a copy and the whole analysis runs again; it is kept only if its rule improves, no other rule gets a new flag and the score does not drop. Smallest change wins; when several pass, an OpenRouter model picks one (at most 4 calls per run). Planning runs in a Web Worker.
+- Demo ferry: 14 fixes, score 63 to 91 (AI offline) in about 2 s of planning; 9 flags left for a designer with the reason (fire zone length, exits of small rooms, Stair B queue, one flooding case). Model ships: nothing unsafe to change.
+- The run: camera flies to each spot, accent ring, the change glides in (sizes, positions, widths, bulkhead x, deck z) or appears (doors, bulkheads, lifeboats, pipes redraw themselves), green ring when the flag clears; segmented progress, captions with the AI reason; Pause (Space), Skip, Stop; editing locked; one undo step, Keep or Undo all.
+- netlify/functions/fix-choice.mts: OPENROUTER_API_KEY from the environment, size-checked input, JSON-schema answer limited to the given ids, 8.5 s budget, per-IP limit, cache. Paid google/gemini-2.5-flash-lite (fallback openai/gpt-4.1-nano), then free nvidia/nemotron-3.5-super-vl:free, dots-3-note-preview:free, gemma-4-31b-it:free with reasoning off. The OpenRouter account currently has no credit (402), so the free models answer (about 1 s). npm run dev serves the same function with the key from .env.
+- Tests: 124 unit (tests/fixes.test.ts: steps never lower the score, replaying reproduces the plan, AI pick respected, invalid AI answer ignored), 37 browser checks.
+
 ## To-do
 ### Docs and data
 - [ ] Download the USCG stair PDF by hand (see THINGS_TO_ASK.txt)

@@ -175,6 +175,7 @@ function Scene() {
   const decks = sortedDecks(design);
   const activeIdx = decks.findIndex((d) => d.id === activeDeckId);
   const testing = mode === "test";
+  const fixing = useStore((s) => !!s.fix);
   const visibleDeckIds = new Set(view.isolateDeck && !testing ? decks.slice(0, activeIdx + 1).map((d) => d.id) : decks.map((d) => d.id));
   const c = analysis?.condition;
 
@@ -199,12 +200,13 @@ function Scene() {
           {testing && testKind === "evac" && <EvacDots />}
           {!testing && <FlagPins />}
           {!testing && <RunPins />}
+          <FixRings />
           <RefMeshView />
         </ShipMotion>
         {c && !c.overloaded && (testing || view.showWater) && (
           <Sea T={c.T} lcf={c.hydro.LCF} trimTan={testing ? 0 : (c.draftAft - c.draftFwd) / Math.max(1, c.hydro.maxXs - c.hydro.minXs)} L={design.hull.LOA} B={design.hull.BOA} />
         )}
-        {!testing && <Interaction ship={geomShip} />}
+        {!testing && !fixing && <Interaction ship={geomShip} />}
       </group>
     </>
   );
@@ -1086,6 +1088,47 @@ function RefMeshView() {
   return (
     <group position={ref.offset} rotation={[0, 0, ref.rotZ * D2R]} scale={ref.scale}>
       <primitive object={obj} />
+    </group>
+  );
+}
+
+// ------------------------------------------------------------------ fix run effects
+/** Expanding rings where a fix happens: accent while it is being changed, green when the flag clears. */
+function FixRings() {
+  const fx = useStore((s) => s.fx);
+  return (
+    <>
+      {fx.map((f) => (
+        <FixRing key={f.id} x={f.x} y={f.y} z={f.z} done={f.kind === "done"} />
+      ))}
+    </>
+  );
+}
+
+function FixRing({ x, y, z, done }: { x: number; y: number; z: number; done: boolean }) {
+  const p = usePalette();
+  const g = useRef<THREE.Group>(null);
+  const t0 = useRef(performance.now());
+  const color = done ? STATUS_COLOR.green : p.accent;
+  useFrame(() => {
+    const grp = g.current;
+    if (!grp) return;
+    const t = (performance.now() - t0.current) / 1000;
+    grp.children.forEach((c, i) => {
+      const u = Math.max(0, Math.min(1, (t - i * 0.22) / 1.3));
+      const e = 1 - (1 - u) ** 3;
+      c.scale.setScalar(0.6 + e * (done ? 3.6 : 4.4));
+      ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = (1 - u) * 0.9;
+    });
+  });
+  return (
+    <group ref={g} position={[x, y, z + 0.15]}>
+      {[0, 1].map((i) => (
+        <mesh key={i} renderOrder={19}>
+          <ringGeometry args={[0.955, 1, 72]} />
+          <meshBasicMaterial color={color} transparent opacity={0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
     </group>
   );
 }

@@ -17,6 +17,7 @@ import { requiredMinutes, RULES } from "../engine/rules";
 import { autoDoors } from "../engine/generators";
 import { pairKey, isCable, PIPE_KINDS, CABLE_KINDS, type SpaceType, type FireRating } from "../engine/types";
 import { downloadReport } from "./report";
+import { FixBar, startFix, FIX_ICON } from "./FixDirector";
 import { f, Icon } from "./fields";
 
 const PALETTE: SpaceType[] = ["cabin", "corridor", "stairwell", "public", "muster_station", "galley", "engine_room", "store", "tank", "lift", "void", "other"];
@@ -159,6 +160,10 @@ export function App() {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
       const s = useStore.getState();
+      if (s.fix) {
+        if (e.key === " " && s.fix.phase === "running") (e.preventDefault(), s.setFix({ paused: !s.fix.paused }));
+        return; // editing is locked during a fix run
+      }
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       if (mod && k === "z" && !e.shiftKey) return (e.preventDefault(), s.undo());
@@ -282,13 +287,16 @@ export function App() {
       { label: `${st.view.showCables ? "Hide" : "Show"} cables`, onClick: () => st.setView({ showCables: !st.view.showCables }) },
     ],
     Analyze: TABS.filter((t) => !t.testOnly && !["guide", "sources"].includes(t.id)).map((t) => ({ label: t.label, onClick: () => st.set({ panel: t.id }) })),
-    Test: (["sea", "heel", "flood", "evac"] as TestKind[]).map((k) => ({
-      label: { sea: "Ship in waves", heel: "Heel", flood: "Flooding", evac: "Evacuation walk-through" }[k],
-      onClick: () => {
-        st.setTest({ kind: k, running: true, restart: Date.now() });
-        switchMode("test");
-      },
-    })),
+    Test: [
+      ...(["sea", "heel", "flood", "evac"] as TestKind[]).map((k) => ({
+        label: { sea: "Ship in waves", heel: "Heel", flood: "Flooding", evac: "Evacuation walk-through" }[k],
+        onClick: () => {
+          st.setTest({ kind: k, running: true, restart: Date.now() });
+          switchMode("test");
+        },
+      })),
+      { label: "Fix with AI", sep: true, disabled: !!st.fix, onClick: () => void startFix() },
+    ],
     Help: [
       { label: "Interactive tour", hint: "?", onClick: () => st.set({ tourStep: 0 }) },
       { label: "How to use", onClick: () => st.set({ panel: "guide" }) },
@@ -311,9 +319,10 @@ export function App() {
           {(["design", "test"] as const).map((m) => (
             <button key={m} className={`relative py-3 text-[12px] capitalize transition-colors ${st.mode === m ? "text-fg" : "text-muted hover:text-fg"}`} onClick={() => switchMode(m)}>
               {m}
-              {st.mode === m && <span className="anim-underline absolute right-0 bottom-0 left-0 h-[2px] bg-accent" />}
+              {st.mode === m && !st.fix && <span className="anim-underline absolute right-0 bottom-0 left-0 h-[2px] bg-accent" />}
             </button>
           ))}
+          <FixButton />
         </div>
         <div className="ml-auto flex items-center gap-4 text-[12px]">
           {a && (
@@ -363,7 +372,7 @@ export function App() {
         <main data-tour="viewport" className="relative min-w-0 flex-1 overflow-hidden">
           <Viewport />
           <Fragments />
-          {!testing && <ToolRail />}
+          {!testing && !st.fix && <ToolRail />}
           <div className="pointer-events-none absolute top-3 right-[284px] left-14 flex justify-center">
           <div data-tour="decks" className={`pointer-events-auto flex items-center ${decks.length > 8 ? "gap-3" : "gap-5"}`}>
             {decks.length > 8 && <span className="label mr-1">Deck</span>}
@@ -380,13 +389,15 @@ export function App() {
           </div>
           </div>
           <ModelPicker />
-          {!testing && st.tool.kind !== "select" && (
+          {!testing && !st.fix && st.tool.kind !== "select" && (
             <div key={JSON.stringify(st.tool)} className="anim-wipe absolute top-11 left-1/2 -translate-x-1/2 text-[11.5px] whitespace-nowrap text-muted">
               {toolHint(st.tool)} <span className="text-faint">Esc to stop</span>
             </div>
           )}
           {testing && <div className="anim-wipe absolute top-11 left-1/2 -translate-x-1/2 text-[11.5px] text-muted">Test mode. Switch to Design to edit.</div>}
-          {!testing && <Hotbar />}
+          {!testing && !st.fix && <Hotbar />}
+          {st.fix && <div className="absolute inset-0 z-20" onWheel={(e) => e.stopPropagation()} title="Editing is locked during the fix run" />}
+          <FixBar />
           <Toast />
         </main>
 
@@ -461,6 +472,7 @@ export function App() {
 
 function switchMode(m: "design" | "test") {
   const st = useStore.getState();
+  if (st.fix) return st.notify("Finish or stop the fix run first.", "info");
   st.set({ mode: m, panel: m === "test" ? "test" : st.panel === "test" ? "issues" : st.panel, tool: { kind: "select" } });
   if (m === "test") st.setTest({ running: true, restart: Date.now() });
 }
@@ -626,6 +638,33 @@ function MenuBar({ menus }: { menus: Record<string, { label: string; onClick: ()
         </div>
       ))}
     </div>
+  );
+}
+
+/** "Fix with AI" next to Design / Test: plans and plays verified fixes for the flags. */
+function FixButton() {
+  const fix = useStore((s) => s.fix);
+  const red = useStore((s) => s.analysis?.rules.some((r) => r.findings.some((f) => f.status === "red" || f.status === "amber")) ?? false);
+  const [hover, setHover] = useState(false);
+  const on = !!fix;
+  return (
+    <button
+      data-tour="fix"
+      onClick={() => void startFix()}
+      disabled={on}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Find a safe fix for each flag and show the changes one by one"
+      className={`relative flex items-center gap-1.5 py-3 text-[12px] transition-colors ${on ? "text-fg" : "text-muted hover:text-fg"}`}
+    >
+      <span className="relative flex h-5 w-5 items-center justify-center">
+        <HoverTile color="var(--accent)" show={hover || on} strong={on} className="-inset-0.5" />
+        <Icon d={FIX_ICON} size={14} className="relative text-accent" />
+      </span>
+      Fix with AI
+      {red && !on && <span className="h-[4px] w-[4px] rounded-full" style={{ background: "var(--warn)" }} />}
+      {on && <span className="anim-underline absolute right-0 bottom-0 left-0 h-[2px] bg-accent" />}
+    </button>
   );
 }
 

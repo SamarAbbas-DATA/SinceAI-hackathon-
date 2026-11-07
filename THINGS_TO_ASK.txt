@@ -130,6 +130,11 @@ Q20 Passenger heel (rule INTACT-STABILITY, IS Code 2008 Part A 3.1, not download
     counted. Turning: M = 0.200 v2 / LWL x displacement x (KG - d/2) at the design speed. Both: heel at most
     10 degrees. Survival craft at least 2 m above the waterline (SOLAS III/13.1.2, value to confirm).
 
+Q21 Fix with AI (src/engine/fixes.ts)
+    Automatic repairs are suggestions for early design: e.g. fewer berths in small cabins, removing a connecting
+    door, moving the collision bulkhead forward, adding a watertight bulkhead. Please tell us which kinds of change
+    a designer at Meyer Turku would never want made automatically, and we will take them out of the catalogue.
+
 DOCUMENTS STILL MISSING
 - (done) US Coast Guard stair guideline is in docs/.
 - SOLAS II-1/7-3 permeability table, IS Code 2008 Part A, SOLAS III/21: needed to move Q5 to Q7

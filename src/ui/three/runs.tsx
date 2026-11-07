@@ -160,9 +160,11 @@ function RunMesh({ run, pieces, hover, setHover }: { run: Run; pieces: THREE.Vec
     m.position.z = A.lift;
     if (mat.current) mat.current.emissiveIntensity += ((hot || selected ? 0.55 : dark ? 0.16 : 0.08) - mat.current.emissiveIntensity) * k;
   });
-  // geometry rebuilt (edit): it is complete at once
+  // geometry rebuilt (edit): complete at once, except during a fix run, where a rerouted run draws itself in again
   useEffect(() => {
-    if (anim.current.done && geo) geo.setDrawRange(0, Infinity);
+    if (!geo || !anim.current.done) return;
+    if (useStore.getState().fix?.phase === "running") anim.current = { ...anim.current, start: performance.now() / 1000, delay: 0, dur: 0.9, done: false };
+    else geo.setDrawRange(0, Infinity);
   }, [geo]);
   if (!geo) return null;
   const color = RUN_COLOR[run.kind];

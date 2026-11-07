@@ -4,7 +4,7 @@
 
 **Challenge:** "Understanding ship design rules and compliance". Help engineers understand complex ship rules and catch compliance issues early in design.
 
-**Idea:** A game-like 3D ship arrangement editor in the browser. You place rooms, stairs, doors, fire zone and watertight bulkheads, tanks and lifeboats on decks of a parametric (or imported) hull. After every change the ship is recalculated and checked against `rules.json`. Broken parts glow red or amber, and every flag says what is wrong, why it matters and how to fix it. A Test mode animates the ship in waves, heeling, flooding and evacuating, with live dials. A PDF report shows all flags on deck plans. No AI is used: all checks are deterministic.
+**Idea:** A game-like 3D ship arrangement editor in the browser. You place rooms, stairs, doors, fire zone and watertight bulkheads, tanks and lifeboats on decks of a parametric (or imported) hull. After every change the ship is recalculated and checked against `rules.json`. Broken parts glow red or amber, and every flag says what is wrong, why it matters and how to fix it. A Test mode animates the ship in waves, heeling, flooding and evacuating, with live dials. A PDF report shows all flags on deck plans. All checks are deterministic. The only AI is optional: "Fix with AI" lets a small OpenRouter model pick between repairs that the code already verified (`src/engine/fixes.ts`, `netlify/functions/fix-choice.mts`).
 
 ## Stack
 - Vite + React 18 + TypeScript, Tailwind v4 (theme tokens in `src/index.css`, dark default), Zustand, jsPDF. No backend.

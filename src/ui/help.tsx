@@ -98,6 +98,11 @@ export function GuidePanel() {
           </li>
         </ol>
       </Section>
+      <Section title="Fix with AI">
+        <p className="text-xs leading-relaxed">
+          Press <b>Fix with AI</b> next to Test. The tool looks for a repair for every flag (set a wall rating, widen a stair or its doors, move the collision bulkhead, add a watertight bulkhead, straighten a cable, move a fuel line away from the exhaust and more), tries each one on a copy of the design and keeps it only if that flag improves and nothing else gets worse. When several repairs pass, a small AI picks the one a designer would prefer. Press Start to watch them: the camera flies to each spot, the change animates in and the flag turns green. Pause, Skip and Stop are at the bottom (Space pauses); at the end, keep the changes or undo all of them at once. Flags that need a designer's decision are listed and left alone.
+        </p>
+      </Section>
       <Section title="Mouse and keys">
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
           {[
@@ -171,7 +176,7 @@ export function SourcesPanel() {
     <div>
       <Section title="Is AI used?">
         <p className="text-xs leading-relaxed">
-          No. There is no language model, local or remote, in this tool. Every flag is produced by deterministic code: geometry and graph checks plus naval architecture calculations (vessel.js), compared against the numbers in <code>rules.json</code>. The same design always gives the same result, and every number can be traced to a formula and a source below.
+          Not for the checks. Every flag is produced by deterministic code: geometry and graph checks plus naval architecture calculations (vessel.js), compared against the numbers in <code>rules.json</code>. The same design always gives the same result, and every number can be traced to a formula and a source below. The only AI is optional, in Fix with AI: a small model (via OpenRouter) may pick between repair options that the code has already tested against every rule. It never decides whether something passes, never computes a value and never draws geometry; without it the smallest safe change is used.
         </p>
       </Section>
       <Section title="How each check is decided">
@@ -235,6 +240,7 @@ const STEPS: { target: string; title: string; text: string; image?: string }[] =
   { target: "viewport", title: "3D view", text: "Drag a space to move it, it snaps to neighbours and never overlaps. Hover to lift a space, double-click to fly to it, scroll to zoom where the mouse points." },
   { target: "tabs", title: "Results", text: "Issues lists every flag with what is wrong and how to fix it. The other tabs show hydrostatics, stability, damage, evacuation and performance." },
   { target: "score", title: "Score", text: "The compliance score updates on every change. Green rules pass, amber are close to a limit, red are broken." },
+  { target: "fix", title: "Fix with AI", text: "Finds a safe repair for each flag, tests it against every rule first, then shows the changes one by one: the camera flies to each spot and the flag turns green. An AI only picks between repairs that already pass. Pause, Skip or Stop at the bottom; keep the result or undo it all." },
   { target: "report", title: "Download the report", text: "Report saves a PDF of the design: every flag with its fix and source page, deck plans with the flagged parts marked, weights, stability, damage cases and evacuation. Also under File > Download PDF report. Early pre-check, not an official approval." },
 ];
 
