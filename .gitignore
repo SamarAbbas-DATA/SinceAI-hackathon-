@@ -31,6 +31,13 @@ desktop.ini
 # large reference videos (kept locally; screenshots and the wave GIF stay in the repo)
 reference_images/*.mp4
 
+# large CAD models (Navisworks, FBX exports): kept locally, too big for GitHub
+*.nwd
+*.nwc
+*.nwf
+*.fbx
+*.FBX
+
 # Netlify CLI local state
 .netlify/
 

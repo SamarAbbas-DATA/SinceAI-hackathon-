@@ -45,6 +45,9 @@ export interface Deck {
   id: string;
   name: string;
   z: number; // deck floor height above baseline
+  /** Drawing only: x range (m) where the deck plate is shown. Lets an open deck above the hull (a forecastle,
+   *  the roof of a deckhouse) be drawn without covering the whole length. No effect on any calculation. */
+  plate?: [number, number];
 }
 
 export interface StairProps {

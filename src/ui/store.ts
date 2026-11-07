@@ -32,6 +32,22 @@ export interface RefMesh {
   opacity: number;
 }
 
+/** A ship read from uploaded files (File > Import ship files). Listed in the model picker under "Imported". */
+export interface ImportedModel {
+  id: string;
+  label: string;
+  note: string;
+  make: () => Design;
+  /** exterior model in ship coordinates (THREE.Object3D), painted shell shown when zoomed out */
+  shell: unknown | null;
+  files: string[];
+}
+
+/** A model ship or an imported ship, by id. */
+export function findModel(st: { imported: ImportedModel[] }, id: string): { id: string; label: string; note: string; make: () => Design; livery?: unknown; shell?: unknown } | undefined {
+  return MODELS.find((m) => m.id === id) ?? st.imported.find((m) => m.id === id);
+}
+
 export interface TestSettings {
   kind: TestKind;
   running: boolean;
@@ -129,6 +145,9 @@ interface State {
   modelId: string;
   drafts: Record<string, { design: Design; past: Design[]; future: Design[]; activeDeckId: string }>;
   switchModel: (id: string) => void;
+  imported: ImportedModel[];
+  /** adds (or replaces) an imported ship and switches to it */
+  addImported: (m: ImportedModel) => void;
   /** True when any model has edits since the page was opened (used for the leave-page warning). */
   hasUnsavedEdits: () => boolean;
   assembleAt: number; // time (s) of the last design load: spaces assemble from it
@@ -222,7 +241,7 @@ export const useStore = create<State>((set, get) => {
       const st = get();
       if (id === st.modelId) return;
       if (st.fix) return st.notify("Finish or stop the fix run first.", "info");
-      const m = MODELS.find((x) => x.id === id);
+      const m = findModel(st, id);
       if (!m) return;
       gestureStart = null;
       const drafts = { ...st.drafts, [st.modelId]: { design: st.design, past: st.past, future: st.future, activeDeckId: st.activeDeckId } };
@@ -230,7 +249,7 @@ export const useStore = create<State>((set, get) => {
       const design = saved?.design ?? normalizeDesign(m.make());
       const sorted = [...design.decks].sort((a, b) => a.z - b.z);
       // model ships open on their top deck, so the whole painted hull is visible from the start
-      const deck = saved?.activeDeckId ?? (m.livery ? sorted[sorted.length - 1]?.id : sorted[Math.min(2, sorted.length - 1)]?.id) ?? "";
+      const deck = saved?.activeDeckId ?? (m.livery || m.shell ? sorted[sorted.length - 1]?.id : sorted[Math.min(2, sorted.length - 1)]?.id) ?? "";
       set({
         modelId: id,
         drafts,
@@ -246,6 +265,19 @@ export const useStore = create<State>((set, get) => {
       });
       schedule();
       get().notify(saved ? `${m.label}: your edits are back.` : `${m.label} loaded. Your edits to the other models are kept until you reload the page.`, "info");
+    },
+    imported: [],
+    addImported: (m) => {
+      const st = get();
+      if (st.fix) return st.notify("Finish or stop the fix run first.", "info");
+      const drafts = { ...st.drafts };
+      delete drafts[m.id];
+      set({ imported: [...st.imported.filter((x) => x.id !== m.id), m], drafts });
+      if (st.modelId !== m.id) return get().switchModel(m.id);
+      // re-import of the ship that is open: replace it (undoable), open on the top deck
+      get().load(m.make());
+      const sorted = [...get().design.decks].sort((a, b) => a.z - b.z);
+      set({ activeDeckId: sorted[sorted.length - 1]?.id ?? get().activeDeckId });
     },
     hasUnsavedEdits: () => {
       const st = get();

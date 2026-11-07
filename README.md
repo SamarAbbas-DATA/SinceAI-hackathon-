@@ -32,7 +32,7 @@ Other commands:
 
 | Command | What it does |
 |---|---|
-| `npm test` | Runs the verification suite (117 unit and physics tests) |
+| `npm test` | Runs the verification suite (139 unit and physics tests) |
 | `npm run e2e` | Browser test with `npm run dev` running: drives the real app in headless Chrome or Edge (placing, overlap refusal, dragging, undo, all four test animations, PDF download). Screenshots and the PDF land in `e2e-output/` |
 | `npm run report` | Prints a full engineering report of the demo ship in the terminal |
 | `npm run report -- my.design.json` | Same report for a design you saved from the app |
@@ -59,6 +59,28 @@ Not for the checks. Every flag comes from deterministic code: geometry and graph
 | vessel.js ship `.json` | Hull offsets, decks, bulkheads, boxes, lifeboats and deadweight from NTNU ShipLab tools |
 | Hull offsets `.csv` | Replaces the hull in all calculations. Layout: first row = label, then station x (m, aft to forward); following rows = waterline z (m), then half-breadths (m); empty cell = no hull. Most hull design programs (Maxsurf, FREE!ship, DELFTship, Rhino) can export offsets. A template is under File |
 | `.stl`, `.obj`, `.gltf`, `.glb` | Shown as a reference model over the arrangement, auto-scaled to the hull length. Not used in calculations |
+| Ship files: several `.csv` tables + exterior `.glb` | File > Import ship files (or drop them on the window). Builds a new ship in the model picker, ready to edit and test. See below |
+
+### Importing a ship from files (example: the RCRV research vessel)
+
+A ship can arrive as a set of plain tables, one per kind of object, the way a CAD or Navisworks export would be split up. Select all of them at once:
+
+| Table (header row) | Holds |
+|---|---|
+| `key,value` | Main data: name, length, beam, depth, draught, speed, people, lightship, deadweight |
+| offsets (`z \ x, station...`) | Hull offsets, half-breadths in metres (same layout as the offsets import) |
+| `deck_id,name,z_m,plate_x0_m,plate_x1_m` | Decks; the plate range only limits where an open deck is drawn |
+| `id,name,type,deck,top_deck,x_aft_m,x_fwd_m,y_stbd_m,y_port_m,persons,...` | Rooms, stairs and tanks as boxes (types: cabin, corridor, stairwell, public, galley, engine_room, store, muster_station, tank, void, other) |
+| `id,deck,x_m,y_m,width_mm` | Emergency doors |
+| `id,kind,x_m,rating` | Watertight and fire zone bulkheads |
+| `space_a,space_b,rating` | Fire rating of shared walls |
+| `id,kind,deck,x_m,y_m,capacity,mass_t` | Lifeboats and liferafts |
+| `run_id,kind,name,size_mm,point,x_m,y_m,deck` | Major pipes and cables, one row per point |
+| exterior `.glb` | The painted outside of the ship in ship coordinates (shown when zoomed out, not used in calculations) |
+
+The file names do not matter; each table is recognised by its header. Rows the tool does not check (masts, antennas, ducts, unknown decks) are left out and listed in the message. Decks and compartments are required, the rest is optional.
+
+**Example.** The Navisworks model `12100-RCRV-199` (320 MB `.nwd`, 4.9 GB as FBX) is too big and too closed to convert in a browser. The RCRV research vessel was therefore rebuilt from views of that model and its published main data (60.6 m overall, 12.4 m beam, 3.81 m draught) and is shipped as these import files in `public/models/rcrv/`. Only what the tool checks is kept (hull, decks, rooms, stairs, tanks, bulkheads, liferafts, major pipes and cables); the mast, antennas, cranes, A-frame and railings are left out of the exterior. To try it: File > Open example: RCRV research vessel, or upload the 10 files from `public/models/rcrv/` with File > Import ship files. After changing `src/data/rcrv.ts` or `src/data/rcrvExterior.ts`, run `npm run build:rcrv`.
 
 Not supported yet: STEP and IGES (they need a large OpenCascade WebAssembly module), DWG, and proprietary formats such as NAPA, Maxsurf `.msd` or AVEVA. Export offsets or a mesh from those tools instead.
 

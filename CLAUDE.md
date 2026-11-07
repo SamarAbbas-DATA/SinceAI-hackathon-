@@ -13,7 +13,7 @@
 - Vitest for unit/physics tests, `scripts/e2e.mjs` for browser tests over the Chrome DevTools protocol, `npm run report` for a terminal report.
 
 ## Architecture
-- `src/engine/` is pure TS, UI-free, testable in Node: `vessel.ts` (adapter, weights, tanks, free surface), `stability.ts` (GZ), `flooding.ts`, `evacuation.ts` (Circ.1533 Annex 2), `topology.ts` (adjacency, doors, routing, max-flow, overlap), `generators.ts` (stamps, auto doors, default pipes and cables), `systems.ts` (pipe and cable geometry), `rules.ts`, `analyze.ts`, `io.ts`.
+- `src/engine/` is pure TS, UI-free, testable in Node: `vessel.ts` (adapter, weights, tanks, free surface), `stability.ts` (GZ), `flooding.ts`, `evacuation.ts` (Circ.1533 Annex 2), `topology.ts` (adjacency, doors, routing, max-flow, overlap), `generators.ts` (stamps, auto doors, default pipes and cables), `systems.ts` (pipe and cable geometry), `rules.ts`, `analyze.ts`, `io.ts`, `shipFiles.ts` (ship as CSV tables), `glb.ts` (exterior .glb writer). Imported ships: `src/ui/shipImport.ts`; the RCRV example is built by `scripts/build-rcrv.ts` from `src/data/rcrv.ts` and `rcrvExterior.ts` into `public/models/rcrv/`.
 - `src/ui/`: `store.ts`, `App.tsx`, `three/Viewport.tsx`, `Inspector.tsx`, `panels.tsx`, `TestPanel.tsx`, `help.tsx`, `report.ts`, `three/runs.tsx` (pipes and cables).
 - Coordinates follow vessel.js: x forward from the stern, y to port, z up from the keel. The three.js scene wraps everything in one group rotated -90 deg about X.
 

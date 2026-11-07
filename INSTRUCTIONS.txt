@@ -56,7 +56,13 @@ TASK: Fix with AI (automatic fixes for flags, optional AI choice, animated run)
 
 TASK: file import / export
   - src/engine/io.ts (design JSON, vessel.js JSON, offsets CSV), src/ui/App.tsx loadMesh (STL/OBJ/glTF)
-  - tests/io.test.ts, tests/features.test.ts
+  - src/engine/shipFiles.ts    ship as CSV tables (export and import, table found from its header row)
+  - src/engine/glb.ts          writes an exterior .glb in ship coordinates (tagged, placed without scaling)
+  - src/ui/shipImport.ts       File > Import ship files (several at once, drag and drop), Open example
+  - src/data/rcrv.ts, src/data/rcrvExterior.ts   RCRV research vessel rebuilt from the Navisworks views;
+    scripts/build-rcrv.ts writes public/models/rcrv/ (run it after changing either file; a test checks it)
+  - scripts/check-rcrv.ts      prints the RCRV analysis; --calibrate GM recomputes the lightship
+  - tests/io.test.ts, tests/features.test.ts, tests/shipFiles.test.ts, scripts/e2e.mjs (upload section)
 
 BEFORE SAYING A CHANGE IS DONE
   npm test            unit and physics tests

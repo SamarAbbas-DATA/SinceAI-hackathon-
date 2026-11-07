@@ -2,7 +2,20 @@
 // to the current three.js BufferGeometry API, and sampled finer along the length).
 import * as THREE from "three";
 import type { Ship } from "../../vendor/vessel/vessel.module.js";
-import { deckOutline } from "../../engine/vessel";
+import { deckOutline, halfBreadthAt } from "../../engine/vessel";
+
+/** Deck outline limited to x0..x1 (a deck that is open or drawn only over part of the length). */
+function plateOutline(ship: Ship, z: number, [x0, x1]: [number, number], samples = 60): [number, number][] {
+  const L = ship.structure.hull.attributes.LOA;
+  const a = Math.max(0, x0),
+    b = Math.min(L, x1);
+  const port: [number, number][] = [];
+  for (let i = 0; i <= samples; i++) {
+    const x = a + ((b - a) * i) / samples;
+    port.push([x, Math.max(0, halfBreadthAt(ship, x, z))]);
+  }
+  return [...port, ...port.map(([x, y]) => [x, -y] as [number, number]).reverse()];
+}
 
 export function hullGeometry(ship: Ship, samples = 90): THREE.BufferGeometry {
   const hull = ship.structure.hull;
@@ -60,8 +73,8 @@ export function hullGeometry(ship: Ship, samples = 90): THREE.BufferGeometry {
   return g;
 }
 
-export function deckGeometry(ship: Ship, z: number): THREE.BufferGeometry {
-  const outline = deckOutline(ship, z + 0.01, 80);
+export function deckGeometry(ship: Ship, z: number, plate?: [number, number]): THREE.BufferGeometry {
+  const outline = plate ? plateOutline(ship, z + 0.01, plate) : deckOutline(ship, z + 0.01, 80);
   const contour = outline.map(([x, y]) => new THREE.Vector2(x, y));
   const tris = THREE.ShapeUtils.triangulateShape(contour, []);
   const pos: number[] = [];

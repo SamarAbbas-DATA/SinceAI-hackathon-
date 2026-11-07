@@ -1,0 +1,17 @@
+# RCRV 199 research vessel: fire rating of the wall between two compartments
+# Source: 12100-RCRV-199 Navisworks model (rebuilt from model views) and published main data
+# Units: metres, tonnes, millimetres for widths and sizes. x forward from the stern, y to port, z up from the keel.
+space_a,space_b,rating
+fuel-oil-tank-1-p,fuel-oil-tank-2-p,A-60
+fuel-oil-tank-1-s,fuel-oil-tank-2-s,A-60
+engine-room,ld-corridor,A-60
+engine-room,stair-c,A-60
+engine-room,switchboard,A-60
+aux-machinery,ld-corridor,A-60
+ld-cabin-s,stair-a,A-30
+galley,md-corridor,A-30
+sci-cabin-s2,stair-a,A-30
+sci-cabin-s3,stair-a,A-30
+sci-cabin-p1,stair-b,A-30
+second-eng,stair-a,A-30
+master,stair-b,A-30

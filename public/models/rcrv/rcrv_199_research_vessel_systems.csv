@@ -1,0 +1,39 @@
+# RCRV 199 research vessel: major pipes and cables: one row per point, at the deckhead of the given deck
+# Source: 12100-RCRV-199 Navisworks model (rebuilt from model views) and published main data
+# Units: metres, tonnes, millimetres for widths and sizes. x forward from the stern, y to port, z up from the keel.
+run_id,kind,name,size_mm,point,x_m,y_m,deck
+fm-LD,fire_main,Fire main Lower deck (from the fire pumps),200,1,13,0.3,LD
+fm-LD,fire_main,Fire main Lower deck (from the fire pumps),200,2,46.5,0.3,LD
+fm-riser,fire_main,Fire main riser,200,1,31.5,0.3,LD
+fm-riser,fire_main,Fire main riser,200,2,31.5,0.3,D02
+fm-MD,fire_main,Fire main Main deck,200,1,24.5,0.3,MD
+fm-MD,fire_main,Fire main Main deck,200,2,46.5,0.3,MD
+fm-D01,fire_main,Fire main 01 deck,200,1,27.5,0.3,D01
+fm-D01,fire_main,Fire main 01 deck,200,2,44.5,0.3,D01
+fm-D02,fire_main,Fire main 02 deck,200,1,31.5,0.3,D02
+fm-D02,fire_main,Fire main 02 deck,200,2,45,0.3,D02
+bilge-main,bilge_ballast,Bilge and ballast main,300,1,12.5,0.6,DB
+bilge-main,bilge_ballast,Bilge and ballast main,300,2,55.7,0.6,DB
+fuel-1,fuel_oil,Fuel oil line tank 1,100,1,21,1,DB
+fuel-1,fuel_oil,Fuel oil line tank 1,100,2,19,1,DB
+fuel-1,fuel_oil,Fuel oil line tank 1,100,3,19,1,LD
+fuel-2,fuel_oil,Fuel oil line tank 2,100,1,28,-1,DB
+fuel-2,fuel_oil,Fuel oil line tank 2,100,2,19,-1,DB
+fuel-2,fuel_oil,Fuel oil line tank 2,100,3,19,-1,LD
+exhaust-1,exhaust,Exhaust uptake 1,600,1,22,-4.4,LD
+exhaust-1,exhaust,Exhaust uptake 1,600,2,22,-4.4,D02
+exhaust-2,exhaust,Exhaust uptake 2,600,1,22,-3.2,LD
+exhaust-2,exhaust,Exhaust uptake 2,600,2,22,-3.2,D02
+hv-propulsion,hv_cable,Propulsion motor cable,120,1,17,-3,LD
+hv-propulsion,hv_cable,Propulsion motor cable,120,2,9,-3,LD
+feeder-LD,feeder_cable,Main feeder from the switchboard,80,1,30,-1.5,LD
+feeder-LD,feeder_cable,Main feeder from the switchboard,80,2,30,-0.3,LD
+feeder-LD,feeder_cable,Main feeder from the switchboard,80,3,32.5,-0.3,LD
+feeder-riser,feeder_cable,Feeder riser,80,1,32.5,-0.3,LD
+feeder-riser,feeder_cable,Feeder riser,80,2,32.5,-0.3,D02
+feeder-MD,feeder_cable,Feeder Main deck,80,1,24.5,-0.3,MD
+feeder-MD,feeder_cable,Feeder Main deck,80,2,46.5,-0.3,MD
+feeder-D01,feeder_cable,Feeder 01 deck,80,1,27.5,-0.3,D01
+feeder-D01,feeder_cable,Feeder 01 deck,80,2,44.5,-0.3,D01
+feeder-D02,feeder_cable,Feeder 02 deck,80,1,32.5,-0.3,D02
+feeder-D02,feeder_cable,Feeder 02 deck,80,2,45,-0.3,D02

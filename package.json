@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "report": "vite-node scripts/report.ts",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "build:rcrv": "vite-node scripts/build-rcrv.ts"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",

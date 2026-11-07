@@ -103,6 +103,11 @@ export function GuidePanel() {
           Press <b>Fix with AI</b> next to Test. The tool looks for a repair for every flag (set a wall rating, widen a stair or its doors, move the collision bulkhead, add a watertight bulkhead, straighten a cable, move a fuel line away from the exhaust and more), tries each one on a copy of the design and keeps it only if that flag improves and nothing else gets worse. When several repairs pass, a small AI picks the one a designer would prefer. Press Start to watch them: the camera flies to each spot, the change animates in and the flag turns green. Pause, Skip and Stop are at the bottom (Space pauses); at the end, keep the changes or undo all of them at once. Flags that need a designer's decision are listed and left alone.
         </p>
       </Section>
+      <Section title="Import a ship from files">
+        <p className="text-xs leading-relaxed">
+          File &gt; <b>Import ship files</b>, or drop the files on the window. Select all files of one ship at once: CSV tables (main data, hull offsets, decks, compartments, emergency doors, bulkheads, fire ratings, lifesaving appliances, pipes and cables) and, optionally, an exterior <code>.glb</code>. Each table is recognised by its header row, so the file names do not matter. Rows this tool does not check (a mast, an antenna, an HVAC duct) are left out and listed in the message. The ship appears in the model picker under Imported, with its painted exterior when zoomed out, and can be edited and tested like the others. File &gt; <b>Open example: RCRV research vessel</b> loads the example files from <code>public/models/rcrv/</code>.
+        </p>
+      </Section>
       <Section title="Mouse and keys">
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
           {[

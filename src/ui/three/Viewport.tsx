@@ -185,8 +185,9 @@ function Scene() {
         <ShipMotion>
           {view.showHull && <HullWire geo={hullGeo} color={p.hull} edge={p.hullEdge} fill={p.dark ? 0.1 : 0.14} />}
           {view.showHull && <LiveryShell ship={geomShip} />}
+          {view.showHull && <ImportedShell />}
           {decks.map((d) => (
-            <DeckPlate key={d.id} ship={geomShip} z={d.z} active={d.id === activeDeckId && !testing} visible={visibleDeckIds.has(d.id)} />
+            <DeckPlate key={d.id} ship={geomShip} z={d.z} plate={d.plate} active={d.id === activeDeckId && !testing} visible={visibleDeckIds.has(d.id)} />
           ))}
           {view.showBulkheads && <Bulkheads ship={geomShip} />}
           <Spaces visibleDeckIds={visibleDeckIds} />
@@ -336,6 +337,72 @@ function LiveryShell({ ship }: { ship: ReturnType<typeof createShip> }) {
       <mesh geometry={geo.stbd} material={mats.stbd} renderOrder={30} raycast={none} />
       <mesh geometry={geo.port} material={mats.port} renderOrder={30} raycast={none} />
       <mesh geometry={geo.caps} material={mats.caps} renderOrder={30} raycast={none} />
+    </group>
+  );
+}
+
+// ------------------------------------------------------------------ exterior of an imported ship
+// The painted outside from the imported .glb: opaque when the whole ship is in view, fading out when
+// zoomed in so the rooms show (like the model-ship liveries). Cut at the active deck when decks above
+// are hidden.
+function ImportedShell() {
+  const shell = useStore((s) => s.imported.find((m) => m.id === s.modelId)?.shell) as THREE.Object3D | null | undefined;
+  const design = useStore((s) => s.design);
+  const isolate = useStore((s) => s.view.isolateDeck);
+  const mode = useStore((s) => s.mode);
+  const activeDeckId = useStore((s) => s.activeDeckId);
+  const { gl, camera, controls } = useThree();
+  const L = design.hull.LOA;
+  const decks = sortedDecks(design);
+  const topDeck = decks[decks.length - 1];
+  const zFull = topDeck ? topDeck.z + deckHeight(design, topDeck.id) + 20 : 1e3; // the shell reaches above the top deck
+  const active = design.decks.find((d) => d.id === activeDeckId);
+  const cutAt = isolate && mode === "design" && active && active.id !== topDeck?.id ? active.z + deckHeight(design, active.id) : zFull;
+  const mats = useMemo(() => {
+    const out: THREE.MeshStandardMaterial[] = [];
+    shell?.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if ((o as THREE.Mesh).isMesh && m) out.push(m);
+    });
+    return out;
+  }, [shell]);
+  const plane = useMemo(() => new THREE.Plane(), []);
+  useEffect(() => {
+    gl.localClippingEnabled = true;
+    for (const m of mats) m.clippingPlanes = [plane];
+  }, [gl, mats, plane]);
+  const groupRef = useRef<THREE.Group>(null);
+  const opacity = useRef(0);
+  useEffect(
+    () => () => {
+      liveryFade.opacity = 0; // leave the hull lines and decks visible when the shell goes
+    },
+    [shell],
+  );
+  useFrame((_, dt) => {
+    const grp = groupRef.current;
+    if (!grp || !shell) return;
+    const target = (controls as unknown as { target?: THREE.Vector3 } | null)?.target;
+    const dist = target ? camera.position.distanceTo(target) : Infinity;
+    const t = Math.min(1, Math.max(0, (dist - 0.6 * L) / (0.3 * L)));
+    const goal = t * t * (3 - 2 * t);
+    opacity.current += (goal - opacity.current) * (1 - Math.exp(-dt * 4));
+    if (Math.abs(goal - opacity.current) < 0.002) opacity.current = goal;
+    const o = opacity.current;
+    liveryFade.opacity = o;
+    if (import.meta.env.DEV) Object.assign(window, { __shellOpacity: o });
+    grp.visible = o > 0.01;
+    // clip plane at z = cutAt in ship coordinates, carried into world space
+    plane.set(new THREE.Vector3(0, 0, -1), cutAt).applyMatrix4(grp.matrixWorld);
+    for (const m of mats) {
+      m.opacity = o;
+      m.depthWrite = o > 0.9;
+    }
+  });
+  if (!shell) return null;
+  return (
+    <group ref={groupRef} visible={false}>
+      <primitive object={shell} />
     </group>
   );
 }
@@ -639,8 +706,9 @@ function EvacDots() {
 
 // ------------------------------------------------------------------ static scene parts
 
-function DeckPlate({ ship, z, active, visible }: { ship: ReturnType<typeof createShip>; z: number; active: boolean; visible: boolean }) {
-  const geo = useMemo(() => deckGeometry(ship, z), [ship, z]);
+function DeckPlate({ ship, z, plate, active, visible }: { ship: ReturnType<typeof createShip>; z: number; plate?: [number, number]; active: boolean; visible: boolean }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const geo = useMemo(() => deckGeometry(ship, z, plate), [ship, z, plate?.[0], plate?.[1]]);
   const p = usePalette();
   const base = active ? 0.95 : 0.4;
   // deck plates are interior detail: they fade out while the painted hull of a model ship is shown

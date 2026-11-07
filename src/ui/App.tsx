@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { useStore, previousSession, hasPreviousSession, type Panel, type Tool, type TestKind } from "./store";
+import { useStore, previousSession, hasPreviousSession, findModel, type Panel, type Tool, type TestKind } from "./store";
 import { Viewport, focusOn } from "./three/Viewport";
 import { Inspector, deleteSelection } from "./Inspector";
 import { IssuesPanel, HydroPanel, StabilityPanel, DamagePanel, EvacPanel, PerformancePanel, DesignPanel } from "./panels";
@@ -12,6 +12,7 @@ import { sortedDecks, spaceVertical, centreOutsideHull } from "../engine/vessel"
 import { exportDesign, exportVesselSpec, parseDesign, parseOffsetsCSV, applyOffsets } from "../engine/io";
 import { blankDesign } from "../data/demoDesign";
 import { MODELS } from "../data/ships";
+import { importFiles, openExample, setReferenceLoader } from "./shipImport";
 import { sharedEdges, overlapsWith } from "../engine/topology";
 import { requiredMinutes, RULES } from "../engine/rules";
 import { autoDoors } from "../engine/generators";
@@ -128,11 +129,50 @@ async function loadMesh(file: File) {
   st.notify(`Loaded ${file.name}, scaled to the hull length (x ${scale.toPrecision(3)}). Adjust it in Design > Reference model.`, "ok");
 }
 
+setReferenceLoader(loadMesh);
+
 export function App() {
   const st = useStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const csvRef = useRef<HTMLInputElement>(null);
   const meshRef = useRef<HTMLInputElement>(null);
+  const shipRef = useRef<HTMLInputElement>(null);
+  const [dropping, setDropping] = useState(false);
+  // drop files anywhere on the window: same as File > Import ship files
+  useEffect(() => {
+    let depth = 0;
+    const has = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const enter = (e: DragEvent) => {
+      if (!has(e)) return;
+      e.preventDefault();
+      depth++;
+      setDropping(true);
+    };
+    const over = (e: DragEvent) => has(e) && e.preventDefault();
+    const leave = (e: DragEvent) => {
+      if (!has(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (!depth) setDropping(false);
+    };
+    const drop = (e: DragEvent) => {
+      if (!has(e)) return;
+      e.preventDefault();
+      depth = 0;
+      setDropping(false);
+      if (useStore.getState().fix || useStore.getState().mode !== "design") return useStore.getState().notify("Switch to Design mode to import files.", "info");
+      void importFiles(Array.from(e.dataTransfer?.files ?? []));
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", st.theme === "dark");
@@ -224,7 +264,7 @@ export function App() {
   const menus: Record<string, { label: string; onClick: () => void; hint?: string; disabled?: boolean; sep?: boolean }[]> = {
     File: [
       { label: "New empty design", onClick: () => confirm("Start a new empty design? You can undo this.") && st.load(blankDesign()) },
-      { label: "Reset this model to its original design", onClick: () => st.load(MODELS.find((m) => m.id === st.modelId)!.make()) },
+      { label: "Reset this model to its original design", onClick: () => st.load((findModel(st, st.modelId) ?? MODELS[0]).make()) },
       {
         label: "Restore last session",
         onClick: () => {
@@ -234,6 +274,8 @@ export function App() {
         disabled: !hasPreviousSession(),
       },
       { label: "Open design or vessel.js file", hint: ".json", onClick: () => fileRef.current?.click(), sep: true },
+      { label: "Import ship files", hint: "several .csv .glb", onClick: () => shipRef.current?.click(), disabled: testing || !!st.fix },
+      { label: "Open example: RCRV research vessel", hint: "imported", onClick: () => void openExample("rcrv"), disabled: testing || !!st.fix },
       { label: "Import hull offsets", hint: ".csv", onClick: () => csvRef.current?.click() },
       { label: "Import 3D reference model", hint: ".stl .obj .glb", onClick: () => meshRef.current?.click() },
       { label: "Save design", hint: ".design.json", onClick: () => download(`${name}.design.json`, exportDesign(st.design)), sep: true },
@@ -366,11 +408,32 @@ export function App() {
           }
         />
         <input ref={meshRef} type="file" accept=".stl,.obj,.gltf,.glb" className="hidden" onChange={(e) => handleFile(e, loadMesh)} />
+        <input
+          ref={shipRef}
+          data-testid="ship-files"
+          type="file"
+          multiple
+          accept=".csv,.txt,.glb,.gltf,.json,.obj,.stl"
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            void importFiles(files);
+          }}
+        />
       </header>
 
       <div className="flex min-h-0 flex-1">
         <main data-tour="viewport" className="relative min-w-0 flex-1 overflow-hidden">
           <Viewport />
+          {dropping && (
+            <div className="anim-rise pointer-events-none absolute inset-3 z-30 flex items-center justify-center rounded-lg border border-dashed border-accent bg-bg/50">
+              <div className="text-center">
+                <div className="label">Import ship files</div>
+                <p className="mt-1 text-[12.5px] text-muted">Drop the CSV tables and the exterior .glb together</p>
+              </div>
+            </div>
+          )}
           <Fragments />
           {!testing && !st.fix && <ToolRail />}
           <div className="pointer-events-none absolute top-3 right-[284px] left-14 flex justify-center">
@@ -546,7 +609,8 @@ function ModelPicker() {
     window.addEventListener("mousedown", close);
     return () => window.removeEventListener("mousedown", close);
   }, [open]);
-  const cur = MODELS.find((m) => m.id === modelId) ?? MODELS[0];
+  const imported = useStore((s) => s.imported);
+  const cur = findModel({ imported }, modelId) ?? MODELS[0];
   const edited = (id: string) => (id === modelId ? pastLen > 0 : (drafts[id]?.past.length ?? 0) > 0);
   return (
     <div ref={ref} data-tour="models" className="anim-rise absolute top-2 right-4 z-20">
@@ -572,6 +636,27 @@ function ModelPicker() {
         <div className="anim-wipe absolute right-0 mt-1 w-[280px] overflow-hidden rounded-md border border-line bg-surface shadow-[0_18px_40px_-16px_rgba(0,0,0,0.6)]">
           <div className="label px-3 pt-2.5 pb-1">Model ships</div>
           {MODELS.map((m) => {
+            const on = m.id === modelId;
+            return (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setOpen(false);
+                  switchModel(m.id);
+                }}
+                className={`relative flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left transition-colors hover:bg-surface-2 ${on ? "text-fg" : "text-muted"}`}
+              >
+                {on && <span className="absolute top-2 bottom-2 left-0 w-[2px] rounded bg-accent" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] text-fg">{m.label}</span>
+                  <span className="block truncate text-[10.5px] text-faint">{m.note}</span>
+                </span>
+                {edited(m.id) && <span className="text-[10px] text-accent">edited</span>}
+              </button>
+            );
+          })}
+          {imported.length > 0 && <div className="label border-t border-line px-3 pt-2.5 pb-1">Imported</div>}
+          {imported.map((m) => {
             const on = m.id === modelId;
             return (
               <button

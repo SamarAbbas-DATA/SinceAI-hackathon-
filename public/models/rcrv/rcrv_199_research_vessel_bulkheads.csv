@@ -1,0 +1,11 @@
+# RCRV 199 research vessel: transverse bulkheads
+# Source: 12100-RCRV-199 Navisworks model (rebuilt from model views) and published main data
+# Units: metres, tonnes, millimetres for widths and sizes. x forward from the stern, y to port, z up from the keel.
+id,kind,x_m,rating
+wt1,watertight,7,A-0
+wt2,watertight,12,A-0
+wt3,watertight,24,A-0
+wt4,watertight,39,A-0
+wt5,watertight,48,A-0
+wt6,watertight,55.2,A-0
+mvz1,fire_zone,24,A-60

@@ -1,0 +1,9 @@
+# RCRV 199 research vessel: decks
+# Source: 12100-RCRV-199 Navisworks model (rebuilt from model views) and published main data
+# Units: metres, tonnes, millimetres for widths and sizes. x forward from the stern, y to port, z up from the keel.
+deck_id,name,z_m,plate_x0_m,plate_x1_m
+DB,Double bottom,0.6,,
+LD,Lower deck,3.1,,
+MD,Main deck,6,,
+D01,01 deck,8.6,24,60.6
+D02,02 deck (bridge),11.2,26.5,47.5

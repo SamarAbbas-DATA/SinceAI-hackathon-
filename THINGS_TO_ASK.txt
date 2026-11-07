@@ -135,6 +135,14 @@ Q21 Fix with AI (src/engine/fixes.ts)
     door, moving the collision bulkhead forward, adding a watertight bulkhead. Please tell us which kinds of change
     a designer at Meyer Turku would never want made automatically, and we will take them out of the catalogue.
 
+Q22 RCRV research vessel (public/models/rcrv, rebuilt from the Navisworks views)
+    Published: 60.6 m overall, 12.4 m beam, 3.81 m draught. Our values (please confirm or correct from the
+    general arrangement): main deck 6.0 m above the keel, decks at 0.6 / 3.1 / 6.0 / 8.6 / 11.2 m, the room
+    layout, 19 persons (11 science, 8 crew; the real ship is said to berth about 29), GM 1.6 m, lightship
+    1441 t, liferafts only (4 x 25 persons) and the bulkhead positions. The LSA rule asks for lifeboats on
+    both sides (passenger ship rule); SOLAS III/31 lets cargo ships under 85 m use liferafts instead, which
+    the tool does not model yet, so the RCRV shows that flag.
+
 DOCUMENTS STILL MISSING
 - (done) US Coast Guard stair guideline is in docs/.
 - SOLAS II-1/7-3 permeability table, IS Code 2008 Part A, SOLAS III/21: needed to move Q5 to Q7

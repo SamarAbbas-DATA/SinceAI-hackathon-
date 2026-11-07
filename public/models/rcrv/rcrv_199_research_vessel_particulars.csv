@@ -1,0 +1,25 @@
+# RCRV 199 research vessel: main particulars
+# Source: 12100-RCRV-199 Navisworks model (rebuilt from model views) and published main data
+# Units: metres, tonnes, millimetres for widths and sizes. x forward from the stern, y to port, z up from the keel.
+key,value
+name,RCRV 199 research vessel
+loa_m,60.6
+boa_m,12.4
+depth_m,6
+design_draft_m,3.81
+design_speed_kn,11.5
+structural_weight_k,0.033
+hull_form,offsets
+bulkhead_deck,MD
+passengers,11
+crew,8
+person_mass_kg,100
+lightship_t,1441
+lightship_lcg_m,28.08
+lightship_kg_m,5.4
+deadweight_t,120
+deadweight_lcg_m,30
+deadweight_kg_m,6.5
+evacuation_scenario,night
+embarkation_launching_min,30
+ro_ro,no

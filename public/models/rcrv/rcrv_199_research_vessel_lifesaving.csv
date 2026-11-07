@@ -1,0 +1,8 @@
+# RCRV 199 research vessel: lifeboats and liferafts
+# Source: 12100-RCRV-199 Navisworks model (rebuilt from model views) and published main data
+# Units: metres, tonnes, millimetres for widths and sizes. x forward from the stern, y to port, z up from the keel.
+id,kind,deck,x_m,y_m,capacity,mass_t
+lrP1,liferaft,D01,25.2,5.4,25,1.5
+lrS1,liferaft,D01,25.2,-5.4,25,1.5
+lrP2,liferaft,D01,26.2,5.4,25,1.5
+lrS2,liferaft,D01,26.2,-5.4,25,1.5

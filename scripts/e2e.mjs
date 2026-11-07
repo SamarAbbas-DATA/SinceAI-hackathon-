@@ -360,6 +360,68 @@ async function main() {
   check("Undo all restores the design exactly", (await ev(`JSON.stringify(${S}.design)`)) === designBefore && (await ev(`${S}.fix`)) === null);
   await ev(`delete window.__fakeAI`);
 
+  // ---- import ship files: several CSV tables and the exterior .glb uploaded together (File > Import ship files)
+  const rcrvDir = path.resolve("public/models/rcrv");
+  const rcrvFiles = fs.readFileSync(path.join(rcrvDir, "files.txt"), "utf8").split(/\r?\n/).filter(Boolean).map((n) => path.join(rcrvDir, n));
+  const upload = async (files) => {
+    await send("DOM.enable");
+    const input = await send("Runtime.evaluate", { expression: `document.querySelector('[data-testid=ship-files]')` });
+    await send("DOM.setFileInputFiles", { files, objectId: input.result.result.objectId });
+    for (let i = 0; i < 60; i++) {
+      if (await ev(`${S}.modelId.startsWith('imp-') && !${S}.analyzing && !!${S}.analysis`)) break;
+      await sleep(250);
+    }
+    await sleep(600);
+  };
+  await ev(`${S}.set({ mode: 'design', panel: 'issues', tool: { kind: 'select' } }); ${S}.select(null)`);
+  await upload(rcrvFiles);
+  const imp = await ev(`({ id: ${S}.modelId, name: ${S}.design.name, spaces: ${S}.design.spaces.length, decks: ${S}.design.decks.length, runs: ${S}.design.runs.length, score: ${S}.analysis.score.score, errors: ${S}.analysis.errors.length, shell: !!${S}.imported[0]?.shell, toast: ${S}.toast?.text })`);
+  check("uploading the RCRV files imports a ship with its exterior, ready to check", imp.name === "RCRV 199 research vessel" && imp.spaces === 39 && imp.decks === 5 && imp.runs === 16 && imp.shell && imp.errors === 0 && imp.score >= 70, JSON.stringify(imp));
+  check("the import message says what was read", /39 compartments/.test(imp.toast ?? "") && /exterior/.test(imp.toast ?? ""), imp.toast);
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: '3d' }))`);
+  await sleep(3000);
+  const shellFar = await ev(`window.__shellOpacity ?? -1`);
+  await shot("import-rcrv");
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:view', { detail: 'side' }))`);
+  await sleep(2200);
+  await shot("import-rcrv-side");
+  await ev(`window.dispatchEvent(new CustomEvent('viewport:focus', { detail: { x: 36, y: 0, z: 7 } }))`);
+  await sleep(3500);
+  const shellNear = await ev(`window.__shellOpacity ?? -1`);
+  check("the exterior is opaque zoomed out and fades when zoomed in", shellFar > 0.9 && shellNear < 0.05, JSON.stringify({ shellFar, shellNear }));
+  await shot("import-rcrv-zoomed");
+  // the imported ship can be edited like any other: move a cabin, undo
+  const cab = await ev(`${S}.design.spaces.find(s => s.id === 'sci-cabin-p1').xCentre`);
+  await ev(`${S}.editSpace('sci-cabin-p1', s => { s.persons = 1; })`);
+  await sleep(800);
+  check("an imported ship can be edited and undone", (await ev(`${S}.design.spaces.find(s => s.id === 'sci-cabin-p1').persons`)) === 1 && (await ev(`${S}.past.length`)) > 0, String(cab));
+  await ev(`${S}.undo()`);
+  // the same files again replace the ship instead of adding a second entry
+  await upload(rcrvFiles);
+  check("importing the same ship again keeps one entry in the model picker", (await ev(`${S}.imported.length`)) === 1);
+  // a table with rows the tool cannot use: they are left out and reported
+  const extraCsv = path.join(tmp, "rcrv_extra_compartments.csv");
+  const compCsv = rcrvFiles.find((f) => f.endsWith("_compartments.csv"));
+  fs.writeFileSync(extraCsv, fs.readFileSync(compCsv, "utf8") + "mast-1,Main mast,mast,D02,,40,41,-0.5,0.5,0\n");
+  await upload(rcrvFiles.map((f) => (f === compCsv ? extraCsv : f)));
+  const left = await ev(`${S}.toast?.text ?? ''`);
+  check("rows this tool does not check are left out and reported", /Left out 1/.test(left) && (await ev(`${S}.design.spaces.length`)) === 39, left);
+  // back to the demo: the exterior goes with the imported ship
+  await ev(`${S}.switchModel('demo')`);
+  await sleep(1500);
+  check("switching back to the demo ferry hides the imported exterior", (await ev(`${S}.design.name.startsWith('Demo')`)) && (await ev(`window.__shellOpacity`)) !== undefined);
+  // the example files shipped with the site load through the same import
+  await ev(`[...document.querySelectorAll('button')].find(b => b.textContent === 'File').click()`);
+  await sleep(300);
+  await ev(`[...document.querySelectorAll('button')].find(b => b.textContent.startsWith('Open example: RCRV')).click()`);
+  for (let i = 0; i < 60; i++) {
+    if (await ev(`${S}.modelId.startsWith('imp-') && !${S}.analyzing`)) break;
+    await sleep(250);
+  }
+  check("File > Open example loads the RCRV from the site", (await ev(`${S}.design.name`)) === "RCRV 199 research vessel");
+  await ev(`${S}.switchModel('demo')`);
+  await sleep(1000);
+
   const errors = await ev(`${S}.analysis.errors`);
   check("no calculation errors", errors.length === 0, errors.join("; "));
   ws.close();
