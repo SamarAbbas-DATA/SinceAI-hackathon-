@@ -6,6 +6,19 @@ Built on [vessel.js](https://github.com/shiplab/vesseljs) (NTNU Ship Design and 
 
 > Early pre-check only. Not an official approval.
 
+## Get the version with the ship designs and logos
+
+The ship designs dropdown, the hull liveries (logos and colours) and their animations live on the `samar-version` branch. Every image they use is committed under `public/` (`public/brand/`, `public/liveries/`, `public/tour/`), so a fresh clone looks and behaves the same on any machine.
+
+```
+git clone -b samar-version https://github.com/SamarAbbas-DATA/SinceAI-hackathon-.git
+cd SinceAI-hackathon-
+npm ci             # installs the exact versions from package-lock.json
+npm run dev
+```
+
+The tag `reproducible-logos` marks the checked snapshot: `git checkout reproducible-logos`.
+
 ## Run
 
 Requires Node.js 18 or newer.
