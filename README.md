@@ -1,5 +1,9 @@
 # Ship Design Pre-Check
 
+<img width="1918" height="915" alt="image" src="https://github.com/user-attachments/assets/e88d2060-aac2-4918-90ac-26798784b65f" />
+
+online version available at [netlify link](https://ship-design-project.netlify.app/) 
+
 Browser-based 3D ship arrangement editor for early design. Every change to the layout runs naval architecture calculations and checks the rules in `rules.json`. Parts that break a rule are flagged in red or amber, with the source clause shown next to the flag.
 
 Built on [vessel.js](https://github.com/shiplab/vesseljs) (NTNU Ship Design and Operation Lab, MIT licence) for hull geometry, hydrostatics, weights, draft, resistance and motions.
