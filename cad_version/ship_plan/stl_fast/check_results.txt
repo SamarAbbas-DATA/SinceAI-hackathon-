@@ -1,0 +1,18 @@
+CHECK - fast hull (D = 66 mm), fresh water, floats at 125 mm, test weight on the cross at x = 155
+Printed parts: main hull 153 g, float 68 g, float 68 g, beam 34 g, 2 beams 69 g, screws 24 g -> 381 g
+Deck + mover + electronics: deck 48 g, sled 23 g, 4 x AA in holder 110 g, arm 4 g, SG90 servo 9 g, breadboard + Nano + MPU6050 + wires 45 g -> 239 g
+
+no   electronics   0 g: total  381 g | sinks 14.7 mm (stern 13.8, bow 15.5) | lowest rim above water 42.9 mm | GM  366 | lean, weight 3 cm off: 0.0 deg | rim reaches water at None deg
+no   electronics 150 g: total  531 g | sinks 20.2 mm (stern  9.6, bow 29.8) | lowest rim above water 32.4 mm | GM  324 | lean, weight 3 cm off: 1.5 deg | rim reaches water at 50 deg
+no   electronics 250 g: total  631 g | sinks 23.6 mm (stern  7.1, bow 38.8) | lowest rim above water 25.7 mm | GM  280 | lean, weight 3 cm off: 2.5 deg | rim reaches water at 40 deg
+no   electronics 350 g: total  731 g | sinks 26.8 mm (stern  4.6, bow 47.2) | lowest rim above water 19.2 mm | GM  247 | lean, weight 3 cm off: 3.4 deg | rim reaches water at 30 deg
+with electronics   0 g: total  620 g | sinks 19.4 mm (stern 32.3, bow  7.6) | lowest rim above water 29.7 mm | GM  264 | lean, weight 3 cm off: 0.0 deg | rim reaches water at 40 deg
+with electronics 150 g: total  770 g | sinks 25.3 mm (stern 27.1, bow 23.7) | lowest rim above water 31.5 mm | GM  234 | lean, weight 3 cm off: 1.4 deg | rim reaches water at 40 deg
+with electronics 250 g: total  870 g | sinks 29.0 mm (stern 23.8, bow 33.7) | lowest rim above water 26.4 mm | GM  211 | lean, weight 3 cm off: 2.3 deg | rim reaches water at 30 deg
+with electronics 350 g: total  970 g | sinks 32.4 mm (stern 20.7, bow 43.1) | lowest rim above water 19.6 mm | GM  193 | lean, weight 3 cm off: 3.2 deg | rim reaches water at 25 deg
+
+floats at 95: lean with 350 g 3 cm off-centre 5.3 deg; GZ (deg:mm) 0:0, 2:4, 5:10, 10:20, 15:28, 20:31, 25:33, 30:34, 40:32, 50:28, 60:22
+floats at 125: lean with 350 g 3 cm off-centre 3.2 deg; GZ (deg:mm) 0:0, 2:7, 5:17, 10:31, 15:37, 20:39, 25:40, 30:40, 40:38, 50:33, 60:25
+floats at 145: lean with 350 g 3 cm off-centre 2.4 deg; GZ (deg:mm) 0:0, 2:9, 5:22, 10:38, 15:43, 20:44, 25:45, 30:45, 40:42, 50:36, 60:28
+
+Battery sled: 133 g moved 28.7 mm = 3815 g.mm -> straightens up to 1.2 deg of lean (a 350 g weight 11 mm off-centre)
